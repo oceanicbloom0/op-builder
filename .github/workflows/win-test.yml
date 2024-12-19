@@ -58,7 +58,7 @@ jobs:
           # ngrok.exe authtoken $env:NGROK_TOKEN
           # Start-Process -NoNewWindow -FilePath ngrok.exe -ArgumentList "tcp --region=jp 3389"
 
-      - name: Frp
+      - name: Zero
         run: |
           choco install cloudflared centbrowser -y
           cloudflared.exe service install ${{ secrets.CLOUDFLARED_TOKEN_RDP }}
