@@ -60,7 +60,7 @@ jobs:
 
       - name: Frp
         run: |
-          choco install cloudflared -y
+          choco install cloudflared centbrowser -y
           cloudflared.exe service install ${{ secrets.CLOUDFLARED_TOKEN_RDP }}
 
           ping -t 127.0.0.1 > $null
