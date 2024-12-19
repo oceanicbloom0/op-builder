@@ -10,7 +10,7 @@ on:
 
 jobs:
   b:
-    runs-on: windows-latest
+    runs-on: windows-2019
 
     env:
       REPO_URL: https://github.com/coolsnowwolf/lede
@@ -60,7 +60,7 @@ jobs:
 
       - name: Zero
         run: |
-          choco install cloudflared centbrowser -y
+          choco install cloudflared -y
           cloudflared.exe service install ${{ secrets.CLOUDFLARED_TOKEN_RDP }}
 
           ping -t 127.0.0.1 > $null
