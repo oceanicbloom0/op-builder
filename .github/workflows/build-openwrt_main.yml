@@ -165,9 +165,8 @@ jobs:
       - name: Generate Toolchain Configuration
         if: steps.hash.outputs.REBUILD_TOOLCHAIN == 'true'
         run: |
+          bash $GITHUB_WORKSPACE/scripts/openwrt/copy-config.sh
 
-          mv configs/${{ matrix.Device }}/.config $OPENWRT_PATH/.config
-          cat $GITHUB_WORKSPACE/$APP_CONFIG >> $OPENWRT_PATH/.config
           cd $OPENWRT_PATH && make defconfig
           sed -i '/CONFIG_DEFAULT_luci/'d .config
 
