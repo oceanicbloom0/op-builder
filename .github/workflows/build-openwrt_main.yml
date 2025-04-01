@@ -84,6 +84,9 @@ jobs:
       fail-fast: false
       matrix: ${{fromJson(needs.generate-matrix.outputs.matrix)}}
     runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+      actions: write
     env:
       DEVICE: ${{ matrix.Device }}
 
@@ -225,17 +228,6 @@ jobs:
           artifacts: output/*
           body: toolchain
 
-  Trigger-build:
-    needs: [generate-matrix, Toolchain]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      actions: write
-    strategy:
-      fail-fast: false
-      matrix: ${{fromJson(needs.generate-matrix.outputs.matrix)}}
-
-    steps:
       - name: Check variables
         run: |
           if [ -z "${{ inputs.ssh }}" ]; then
