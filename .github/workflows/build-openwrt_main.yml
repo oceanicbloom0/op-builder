@@ -257,9 +257,9 @@ jobs:
           client-payload: |-
             {
               "variables": {
-                "OPENWRT_PATH": "${{needs.Toolchain.outputs.OPENWRT_PATH }}",
-                "CURRENT_BRANCH": "${{needs.Toolchain.outputs.CURRENT_BRANCH }}",
-                "SOURCE_REPO": "${{needs.Toolchain.outputs.SOURCE_REPO }}",
+                "OPENWRT_PATH": "${{env.OPENWRT_PATH }}",
+                "CURRENT_BRANCH": "${{env.CURRENT_BRANCH }}",
+                "SOURCE_REPO": "${{env.SOURCE_REPO }}",
                 "DEVICE": "${{matrix.Device }}",
                 "SOURCE_BRANCH": "${{env.SOURCE_BRANCH }}",
                 "TOOLCHAIN_TAG": "${{env.TOOLCHAIN_TAG}}",
