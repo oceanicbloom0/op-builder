@@ -22,12 +22,12 @@ on:
         default: "master"
       ssh:
         description: "SSH"
-        required: false
-        default: ""
+        required: true
+        type: boolean
       only_ssh:
         description: "Only SSH"
-        required: false
-        default: ""
+        required: true
+        type: boolean
 
   repository_dispatch:
     types: [trigger-build-openwrt_main]
