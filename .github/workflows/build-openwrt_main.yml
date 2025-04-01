@@ -243,8 +243,8 @@ jobs:
                 "SOURCE_BRANCH": "${{env.SOURCE_BRANCH }}",
                 "TOOLCHAIN_TAG": "${{env.TOOLCHAIN_TAG}}",
                 "APP_CONFIG": "${{env.APP_CONFIG}}",
-                "ssh": "${{env.ssh}}",
-                "only_ssh": "${{env.only_ssh}}",
+                "ssh": "${{inputs.ssh}}",
+                "only_ssh": "${{inputs.only_ssh}}",
                 "SOURCE_URL": "${{env.SOURCE_URL}}"
               }
             }
