@@ -12,10 +12,14 @@ on:
   #  - cron: "0 19 * * *"
   workflow_dispatch:
     inputs:
-      start:
-        description: "start"
-        required: false
-        default: "true"
+      openwrt_source:
+        description: "OpenWRT Source"
+        required: true
+        default: "https://github.com/coolsnowwolf/lede"
+      openwrt_source_branch:
+        description: "Branch of OpenWRT Source"
+        required: true
+        default: "master"
       ssh:
         description: "SSH"
         required: false
@@ -29,10 +33,9 @@ on:
     types: [trigger-build-openwrt_main]
 
 env:
-  SOURCE_URL: https://github.com/coolsnowwolf/lede
-  SOURCE_BRANCH: master
+  SOURCE_URL: ${{ inputs.openwrt_source }}
+  SOURCE_BRANCH: ${{ inputs.openwrt_source_branch }}
   TOOLCHAIN_TAG: Toolchain
-  SOURCE: lede
   TZ: Asia/Shanghai
   APP_CONFIG: configs/app.config
 
@@ -82,7 +85,7 @@ jobs:
       matrix: ${{fromJson(needs.generate-matrix.outputs.matrix)}}
     runs-on: ubuntu-22.04
     env:
-      DEVICE:  ${{ matrix.Device }}
+      DEVICE: ${{ matrix.Device }}
 
     outputs:
       OPENWRT_PATH: ${{ steps.clone.outputs.OPENWRT_PATH }}
