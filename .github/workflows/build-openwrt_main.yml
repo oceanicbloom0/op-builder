@@ -1,4 +1,4 @@
-name: Build OpenWrt => Main | ${{ inputs.openwrt_source }} => ${{ inputs.openwrt_source_branch }}
+name: Build OpenWrt => Main
 
 on:
   # push:
