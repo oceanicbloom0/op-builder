@@ -228,27 +228,6 @@ jobs:
           artifacts: output/*
           body: toolchain
 
-      - name: Check variables
-        run: |
-          if [ -z "${{ inputs.ssh }}" ]; then
-            echo "Input variable 'ssh' does not exist. Setting default value."
-            export SSH_VAR='default_value'
-            echo "ssh=false" >> $GITHUB_ENV
-          else
-            echo "Input variable 'ssh' exists. Setting value to GitHub environment."
-            echo "ssh=${{ inputs.ssh }}" >> $GITHUB_ENV
-          fi
-
-          if [ -z "${{ inputs.only_ssh }}" ]; then
-            echo "Input variable 'only_ssh' does not exist. Setting default value."
-            export only_ssh_VAR='default_value'
-            echo "only_ssh=false" >> $GITHUB_ENV
-          else
-            echo "Input variable 'only_ssh' exists. Setting value to GitHub environment."
-
-            echo "only_ssh=${{ inputs.only_ssh }}" >> $GITHUB_ENV
-          fi
-
       - name: Trigger Another Workflow
         uses: peter-evans/repository-dispatch@v3
         with:
