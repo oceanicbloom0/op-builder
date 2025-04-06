@@ -12,27 +12,34 @@ on:
   #  - cron: "0 19 * * *"
   workflow_dispatch:
     inputs:
-      start:
-        description: "start"
-        required: false
-        default: "true"
+      openwrt_source:
+        description: "OpenWRT Source"
+        required: true
+        default: "https://github.com/coolsnowwolf/lede"
+      openwrt_source_branch:
+        description: "Branch of OpenWRT Source"
+        required: true
+        default: "master"
+      running_ssh_device:
+        description: "The device name running ssh"
+        required: true
+        default: "x86-64"
       ssh:
         description: "SSH"
-        required: false
-        default: ""
+        required: true
+        type: boolean
       only_ssh:
         description: "Only SSH"
-        required: false
-        default: ""
+        required: true
+        type: boolean
 
   repository_dispatch:
     types: [trigger-build-openwrt_main]
 
 env:
-  SOURCE_URL: https://github.com/coolsnowwolf/lede
-  SOURCE_BRANCH: master
+  SOURCE_URL: ${{ inputs.openwrt_source }}
+  SOURCE_BRANCH: ${{ inputs.openwrt_source_branch }}
   TOOLCHAIN_TAG: Toolchain
-  SOURCE: lede
   TZ: Asia/Shanghai
   APP_CONFIG: configs/app.config
 
@@ -81,8 +88,11 @@ jobs:
       fail-fast: false
       matrix: ${{fromJson(needs.generate-matrix.outputs.matrix)}}
     runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+      actions: write
     env:
-      DEVICE:  ${{ matrix.Device }}
+      DEVICE: ${{ matrix.Device }}
 
     outputs:
       OPENWRT_PATH: ${{ steps.clone.outputs.OPENWRT_PATH }}
@@ -222,38 +232,6 @@ jobs:
           artifacts: output/*
           body: toolchain
 
-  Trigger-build:
-    needs: [generate-matrix, Toolchain]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      actions: write
-    strategy:
-      fail-fast: false
-      matrix: ${{fromJson(needs.generate-matrix.outputs.matrix)}}
-
-    steps:
-      - name: Check variables
-        run: |
-          if [ -z "${{ inputs.ssh }}" ]; then
-            echo "Input variable 'ssh' does not exist. Setting default value."
-            export SSH_VAR='default_value'
-            echo "ssh=false" >> $GITHUB_ENV
-          else
-            echo "Input variable 'ssh' exists. Setting value to GitHub environment."
-            echo "ssh=${{ inputs.ssh }}" >> $GITHUB_ENV
-          fi
-
-          if [ -z "${{ inputs.only_ssh }}" ]; then
-            echo "Input variable 'only_ssh' does not exist. Setting default value."
-            export only_ssh_VAR='default_value'
-            echo "only_ssh=false" >> $GITHUB_ENV
-          else
-            echo "Input variable 'only_ssh' exists. Setting value to GitHub environment."
-
-            echo "only_ssh=${{ inputs.only_ssh }}" >> $GITHUB_ENV
-          fi
-
       - name: Trigger Another Workflow
         uses: peter-evans/repository-dispatch@v3
         with:
@@ -262,15 +240,16 @@ jobs:
           client-payload: |-
             {
               "variables": {
-                "OPENWRT_PATH": "${{needs.Toolchain.outputs.OPENWRT_PATH }}",
-                "CURRENT_BRANCH": "${{needs.Toolchain.outputs.CURRENT_BRANCH }}",
-                "SOURCE_REPO": "${{needs.Toolchain.outputs.SOURCE_REPO }}",
+                "OPENWRT_PATH": "${{env.OPENWRT_PATH }}",
+                "CURRENT_BRANCH": "${{env.CURRENT_BRANCH }}",
+                "SOURCE_REPO": "${{env.SOURCE_REPO }}",
                 "DEVICE": "${{matrix.Device }}",
                 "SOURCE_BRANCH": "${{env.SOURCE_BRANCH }}",
                 "TOOLCHAIN_TAG": "${{env.TOOLCHAIN_TAG}}",
                 "APP_CONFIG": "${{env.APP_CONFIG}}",
-                "ssh": "${{env.ssh}}",
-                "only_ssh": "${{env.only_ssh}}",
-                "SOURCE_URL": "${{env.SOURCE_URL}}"
+                "ssh": "${{inputs.ssh}}",
+                "only_ssh": "${{inputs.only_ssh}}",
+                "SOURCE_URL": "${{env.SOURCE_URL}}",
+                "running_ssh_device":"${{inputs.running_ssh_device}}"
               }
             }
