@@ -26,6 +26,7 @@ jobs:
       ssh: ${{github.event.client_payload.variables.ssh}}
       only_ssh: ${{github.event.client_payload.variables.only_ssh}}
       SOURCE_URL: ${{github.event.client_payload.variables.SOURCE_URL}}
+      running_ssh_device: ${{ github.event.client_payload.variables.running_ssh_device }}
 
     steps:
       - name: Record Start Time
@@ -78,7 +79,7 @@ jobs:
           https://api.github.com/repos/${{ github.repository }}/actions/runs/${{github.run_id}}/cancel
 
       - name: Cancel redundant workflows under SSH
-        if: ${{ (env.ssh == 'true' || env.only_ssh == 'true')  && env.DEVICE != 'x86-64' }}
+        if: ${{ (env.ssh == 'true' || env.only_ssh == 'true')  && env.DEVICE != env.running_ssh_device }}
         run: |
           curl -L \
           -X POST \

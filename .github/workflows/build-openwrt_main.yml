@@ -20,6 +20,10 @@ on:
         description: "Branch of OpenWRT Source"
         required: true
         default: "master"
+      running_ssh_device:
+        description: "The device name running ssh"
+        required: true
+        default: "x86-64"
       ssh:
         description: "SSH"
         required: true
@@ -245,6 +249,7 @@ jobs:
                 "APP_CONFIG": "${{env.APP_CONFIG}}",
                 "ssh": "${{inputs.ssh}}",
                 "only_ssh": "${{inputs.only_ssh}}",
-                "SOURCE_URL": "${{env.SOURCE_URL}}"
+                "SOURCE_URL": "${{env.SOURCE_URL}}",
+                "running_ssh_device":"${{inputs.running_ssh_device}}"
               }
             }
