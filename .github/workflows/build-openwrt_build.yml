@@ -196,9 +196,9 @@ jobs:
         with:
           path: |
             $OPENWRT_PATH/bin/packages
-          key: ${{ env.DEVICE }}-openwrt-packages-${{ hashFiles('.config') }}
+          key: openwrt-packages-${{ env.DEVICE }}
           restore-keys: |
-            ${{ env.DEVICE }}-openwrt-packages-
+            openwrt-packages-
 
       - name: Output the plugin list
         run: |
@@ -277,6 +277,13 @@ jobs:
           echo "status=success" >> $GITHUB_OUTPUT
           make json_overview_image_info
           make checksum
+
+      - name: Save OpenWrt binary packages cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            $OPENWRT_PATH/bin/packages
+          key: openwrt-packages-${{ env.DEVICE }}
 
       - name: Organize files
         run: |
