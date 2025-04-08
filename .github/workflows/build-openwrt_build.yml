@@ -188,13 +188,12 @@ jobs:
       - name: Update configuration
         run: |
           bash $GITHUB_WORKSPACE/scripts/openwrt/copy-config.sh
-
-          cd $OPENWRT_PATH && make defconfig
           sed -i '/CONFIG_DEFAULT_luci/'d .config
 
       - name: Output the plugin list
         run: |
           cd $OPENWRT_PATH
+          make defconfig
 
           ## 输出LUCI-APP
           echo
