@@ -187,6 +187,7 @@ jobs:
 
       - name: Update configuration
         run: |
+          cd $OPENWRT_PATH
           bash $GITHUB_WORKSPACE/scripts/openwrt/copy-config.sh
           sed -i '/CONFIG_DEFAULT_luci/'d .config
 
