@@ -190,6 +190,15 @@ jobs:
           bash $GITHUB_WORKSPACE/scripts/openwrt/copy-config.sh
           sed -i '/CONFIG_DEFAULT_luci/'d .config
 
+      - name: Cache OpenWrt binary packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            $OPENWRT_PATH/bin/packages
+          key: ${{ env.DEVICE }}-openwrt-packages-${{ hashFiles('.config') }}
+          restore-keys: |
+            ${{ env.DEVICE }}-openwrt-packages-
+
       - name: Output the plugin list
         run: |
           cd $OPENWRT_PATH
