@@ -191,7 +191,7 @@ jobs:
           bash $GITHUB_WORKSPACE/scripts/openwrt/copy-config.sh
           sed -i '/CONFIG_DEFAULT_luci/'d .config
 
-      - name: Cache OpenWrt binary packages
+      - name: Get cache
         uses: actions/cache/restore@v4
         with:
           path: |
@@ -282,7 +282,7 @@ jobs:
           make json_overview_image_info
           make checksum
 
-      - name: Save OpenWrt binary packages cache
+      - name: Save cache
         uses: actions/cache/save@v4
         with:
           path: |
