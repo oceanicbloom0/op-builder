@@ -204,13 +204,6 @@ jobs:
           restore-keys: |
             openwrt-packages-
 
-      - name: Move restored cache to OpenWrt directory
-        run: |
-          mv ./build_dir $OPENWRT_PATH/build_dir || true
-          mv ./staging_dir $OPENWRT_PATH/staging_dir || true
-          mv ./tmp $OPENWRT_PATH/tmp || true
-          mv ./bin/packages $OPENWRT_PATH/bin/packages || true
-
       - name: Output the plugin list
         run: |
           cd $OPENWRT_PATH
