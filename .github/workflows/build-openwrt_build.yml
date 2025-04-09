@@ -195,7 +195,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: |
-            $OPENWRT_PATH/bin/packages
+            ${{ env.OPENWRT_PATH }}/bin/packages
           key: openwrt-packages-${{ env.DEVICE }}
           restore-keys: |
             openwrt-packages-
@@ -282,7 +282,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: |
-            $OPENWRT_PATH/bin/packages
+            ${{ env.OPENWRT_PATH }}/bin/packages
           key: openwrt-packages-${{ env.DEVICE }}
 
       - name: Organize files
