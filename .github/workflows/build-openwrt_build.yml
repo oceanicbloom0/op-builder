@@ -192,7 +192,7 @@ jobs:
           sed -i '/CONFIG_DEFAULT_luci/'d .config
 
       - name: Cache OpenWrt binary packages
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: |
             $OPENWRT_PATH/bin/packages
@@ -279,7 +279,7 @@ jobs:
           make checksum
 
       - name: Save OpenWrt binary packages cache
-        uses: actions/cache@v4
+        uses: actions/cache/save@v4
         with:
           path: |
             $OPENWRT_PATH/bin/packages
