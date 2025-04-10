@@ -13,25 +13,39 @@ on:
   workflow_dispatch:
     inputs:
       openwrt_source:
-        description: "OpenWRT Source"
+        description: "OpenWRT source repository"
         required: true
         default: "https://github.com/coolsnowwolf/lede"
+
       openwrt_source_branch:
-        description: "Branch of OpenWRT Source"
+        description: "Branch of the OpenWRT source repository"
         required: true
         default: "master"
+
+      app_config_path:
+        description: "Path to the application configuration file"
+        required: true
+        default: "configs/app.config"
+
+      TOOLCHAIN_TAG:
+        description: "Release tag used to store or retrieve the toolchain"
+        required: true
+        default: "Toolchain"
+
+      ssh:
+        description: "Enable SSH"
+        required: true
+        type: boolean
+
+      only_ssh:
+        description: "Use SSH only"
+        required: true
+        type: boolean
+
       running_ssh_device:
-        description: "The device name running ssh"
+        description: "Name of the device where SSH is running"
         required: true
         default: "x86-64"
-      ssh:
-        description: "SSH"
-        required: true
-        type: boolean
-      only_ssh:
-        description: "Only SSH"
-        required: true
-        type: boolean
 
   repository_dispatch:
     types: [trigger-build-openwrt_main]
@@ -39,9 +53,8 @@ on:
 env:
   SOURCE_URL: ${{ inputs.openwrt_source }}
   SOURCE_BRANCH: ${{ inputs.openwrt_source_branch }}
-  TOOLCHAIN_TAG: Toolchain
-  TZ: Asia/Shanghai
-  APP_CONFIG: configs/app.config
+  TOOLCHAIN_TAG: ${{ inputs.TOOLCHAIN_TAG }}
+  APP_CONFIG: ${{ inputs.app_config_path }}
 
 jobs:
   generate-matrix:
@@ -172,7 +185,7 @@ jobs:
 
           sudo -E apt-get -qq autoremove --purge
           sudo -E apt-get -qq clean
-          sudo timedatectl set-timezone "$TZ"
+          sudo timedatectl set-timezone "Asia/Shanghai"
 
       - name: Generate Toolchain Configuration
         if: steps.hash.outputs.REBUILD_TOOLCHAIN == 'true'
