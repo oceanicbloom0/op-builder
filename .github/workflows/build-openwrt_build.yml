@@ -188,19 +188,6 @@ jobs:
           bash $GITHUB_WORKSPACE/scripts/openwrt/copy-config.sh
           sed -i '/CONFIG_DEFAULT_luci/'d .config
 
-      - name: Get cache
-        uses: actions/cache/restore@v4
-        with:
-          path: |
-            # ${{ env.OPENWRT_PATH }}/bin/packages
-            # ${{ env.OPENWRT_PATH }}/build_dir
-            # ${{ env.OPENWRT_PATH }}/staging_dir
-            # ${{ env.OPENWRT_PATH }}/tmp
-            ${{ env.OPENWRT_PATH }}/.ccache
-          key: openwrt-packages-${{ env.DEVICE }}
-          restore-keys: |
-            openwrt-packages-
-
       - name: Output the plugin list
         run: |
           cd $OPENWRT_PATH
@@ -278,17 +265,6 @@ jobs:
           echo "status=success" >> $GITHUB_OUTPUT
           make json_overview_image_info
           make checksum
-
-      - name: Save cache
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            # ${{ env.OPENWRT_PATH }}/bin/packages
-            # ${{ env.OPENWRT_PATH }}/build_dir
-            # ${{ env.OPENWRT_PATH }}/staging_dir
-            # ${{ env.OPENWRT_PATH }}/tmp
-            ${{ env.OPENWRT_PATH }}/.ccache
-          key: openwrt-packages-${{ env.DEVICE }}
 
       - name: Organize files
         run: |
