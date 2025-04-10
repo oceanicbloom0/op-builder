@@ -27,6 +27,11 @@ on:
         required: true
         default: "configs/app.config"
 
+      trigger-build-event-type:
+        description: "Trigger build event type name"
+        required: true
+        default: "trigger-build-openwrt_build"
+
       TOOLCHAIN_TAG:
         description: "Release tag used to store or retrieve the toolchain"
         required: true
@@ -248,7 +253,7 @@ jobs:
       - name: Trigger Another Workflow
         uses: peter-evans/repository-dispatch@v3
         with:
-          event-type: trigger-build-openwrt_build
+          event-type: ${{inputs.trigger-build-event-type}}
           token: ${{ secrets.GITHUB_TOKEN }}
           client-payload: |-
             {
