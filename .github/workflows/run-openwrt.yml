@@ -68,4 +68,4 @@ jobs:
         run: |
           echo "启动容器，将容器的 80 端口映射到主机 80 端口..."
           docker run -d -p 80:80 firmware:latest
-          docker run --net=host cloudflare/cloudflared:latest tunnel --no-autoupdate run --token $CLOUDFLARED_TOKEN_OPENWRT_WEB
+          docker run --net=host cloudflare/cloudflared:latest tunnel --no-autoupdate run --token ${{ secrets.CLOUDFLARED_TOKEN_OPENWRT_WEB }}
