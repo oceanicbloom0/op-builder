@@ -1,10 +1,10 @@
-name: Run Firmware
+name: Download, Build and Run Firmware
 
 on:
   workflow_dispatch:
     inputs:
       rootfs_url:
-        description: "固件地址：为空时默认使用最新 release 中名称为 rootfs.tar.gz 的固件"
+        description: "固件地址：为空时默认使用最新 release 中匹配 *x86-64-generic-rootfs.tar.gz 的固件"
         required: false
         default: ""
 
@@ -12,38 +12,33 @@ jobs:
   build_and_run:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout 仓库（可选）
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-      - name: 安装 jq 工具
+      - name: Install jq
         run: |
           sudo apt-get update
           sudo apt-get install -y jq
 
-      - name: 确定固件 URL
+      - name: Determine Firmware URL
         id: determine_url
         run: |
           if [ -z "${{ github.event.inputs.rootfs_url }}" ]; then
-            echo "未提供固件 URL，从当前仓库最新 release 获取名称为 rootfs.tar.gz 的 asset..."
             RELEASE_DATA=$(curl -s "https://api.github.com/repos/${{ github.repository }}/releases/latest")
-            FIRMWARE_URL=$(echo "$RELEASE_DATA" | jq -r '.assets[] | select(.name == "rootfs.tar.gz") | .browser_download_url')
-            if [ -z "$FIRMWARE_URL" ]; then
-              echo "错误：在最新 release 中未找到名称为 rootfs.tar.gz 的固件" >&2
+            FIRMWARE_URL=$(echo "$RELEASE_DATA" | jq -r '[.assets[] | select(.name | test("x86-64-generic-rootfs\\.tar\\.gz$"))][0].browser_download_url')
+            if [ -z "$FIRMWARE_URL" ] || [ "$FIRMWARE_URL" == "null" ]; then
+              echo "错误：在最新 release 中未找到符合模式 *x86-64-generic-rootfs.tar.gz 的固件" >&2
               exit 1
             fi
-            echo "自动获取到固件 URL: $FIRMWARE_URL"
           else
             FIRMWARE_URL="${{ github.event.inputs.rootfs_url }}"
-            echo "使用手动提供的固件 URL: $FIRMWARE_URL"
           fi
           echo "FIRMWARE_URL=$FIRMWARE_URL" >> $GITHUB_ENV
 
-      - name: 下载固件
+      - name: Download Firmware
         run: |
-          echo "开始下载固件：$FIRMWARE_URL"
           curl -L "$FIRMWARE_URL" --output firmware.tar.gz
 
-      - name: 生成 Dockerfile
+      - name: Generate Dockerfile
         run: |
           cat << 'EOF' > Dockerfile
           FROM scratch
@@ -54,18 +49,13 @@ jobs:
           USER root
           CMD ["/sbin/init"]
           EOF
-          # 移除可能的前导空格，保证格式正确
           sed -i 's/^[ \t]*//' Dockerfile
-          echo "生成的 Dockerfile 内容："
-          cat Dockerfile
 
-      - name: 构建 Docker 镜像
+      - name: Build Docker Image
         run: |
-          echo "开始构建 Docker 镜像..."
           docker build --build-arg FIRMWARE=firmware.tar.gz -t firmware:latest .
 
-      - name: 启动 Docker 容器
+      - name: Run Docker Container
         run: |
-          echo "启动容器，将容器的 80 端口映射到主机 80 端口..."
-          docker run -d -p 80:80 firmware:latest
+          docker run -d --name firmware_container -p 80:80 firmware:latest
           docker run --net=host cloudflare/cloudflared:latest tunnel --no-autoupdate run --token ${{ secrets.CLOUDFLARED_TOKEN_OPENWRT_WEB }}
