@@ -116,7 +116,8 @@ jobs:
       - name: Create Dockerfile
         id: create-dockerfile
         run: |
-          cat > Dockerfile << 'EOF'
+          mkdir -p docker
+          cat > docker/Dockerfile << 'EOF'
           # Base stage with build dependencies
           FROM ubuntu:22.04 AS base
           
@@ -131,10 +132,7 @@ jobs:
               libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libreadline-dev libssl-dev libtool lrzsz \
               mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf python2.7 python3 python3-pip libpython3-dev qemu-utils \
               rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev python3-pyelftools \
-              aria2 clang clangd ecj lib32gcc-s1 libfuse-dev libncursesw5 libpython3-dev lld lldb python3-ply re2c \
-          && apt-get clean \
-          && rm -rf /var/lib/apt/lists/* \
-          && update-ca-certificates
+              aria2 clang clangd ecj lib32gcc-s1 libfuse-dev libncursesw5 libpython3-dev lld lldb python3-ply re2c
 
           # Set timezone
           RUN ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
@@ -250,7 +248,7 @@ jobs:
           COPY --from=firmware /artifacts /firmware
           EOF
           
-          echo "dockerfile_path=Dockerfile" >> $GITHUB_OUTPUT
+          echo "dockerfile_path=docker/Dockerfile" >> $GITHUB_OUTPUT
 
   login-ghcr:
     runs-on: ubuntu-22.04
@@ -311,6 +309,17 @@ jobs:
           cd ../..
           echo "Device: ${{ matrix.device }}, Toolchain Hash: ${TOOLCHAIN_HASH:0:8}, Config Hash: ${CONFIG_HASH:0:8}"
 
+      # Copy the Dockerfile
+      - name: Copy Dockerfile
+        run: cp ${{ needs.prepare-dockerfile.outputs.dockerfile_path }} ./Dockerfile
+        
+      - name: Verify Dockerfile
+        run: |
+          echo "Checking Dockerfile..."
+          cat Dockerfile
+          echo "Verifying targets in Dockerfile..."
+          grep -E "^FROM .* AS .*" Dockerfile
+
       - name: Check for existing images
         id: check-images
         run: |
@@ -346,7 +355,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ${{ needs.prepare-dockerfile.outputs.dockerfile_path }}
+          file: ./Dockerfile
           push: true
           tags: ${{ env.TOOLCHAIN_IMAGE }}
           target: toolchain
