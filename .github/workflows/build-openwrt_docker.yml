@@ -104,168 +104,9 @@ jobs:
           echo "matrix=$matrix" >> $GITHUB_OUTPUT
           echo $matrix
 
-  prepare-dockerfile:
-    runs-on: ubuntu-22.04
-    needs: generate-matrix
-    outputs:
-      dockerfile_path: ${{ steps.create-dockerfile.outputs.dockerfile_path }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        
-      - name: Create Dockerfile
-        id: create-dockerfile
-        run: |
-          mkdir -p docker
-          cat > docker/Dockerfile << 'EOF'
-          # Base stage with build dependencies
-          FROM ubuntu:22.04 AS base
-          
-          # Set non-interactive mode for apt
-          ENV DEBIAN_FRONTEND=noninteractive
-          
-          # Install basic dependencies
-          RUN apt-get update && apt-get install -y \
-              ack antlr3 aria2 asciidoc autoconf automake autopoint binutils bison build-essential \
-              bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib \
-              git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev \
-              libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libreadline-dev libssl-dev libtool lrzsz \
-              mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf python2.7 python3 python3-pip libpython3-dev qemu-utils \
-              rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev python3-pyelftools \
-              aria2 clang clangd ecj lib32gcc-s1 libfuse-dev libncursesw5 libpython3-dev lld lldb python3-ply re2c
-
-          # Set timezone
-          RUN ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
-
-          # Toolchain stage
-          FROM base AS toolchain
-          
-          ARG SOURCE_URL
-          ARG SOURCE_BRANCH
-          ARG DEVICE
-          ARG GITHUB_WORKSPACE=/workspace
-          
-          WORKDIR /workspace
-          
-          # Clone OpenWrt source code
-          RUN git clone ${SOURCE_URL} -b ${SOURCE_BRANCH} openwrt
-          
-          # Copy configuration files
-          COPY . /workspace/
-          
-          # Set up configuration for toolchain
-          WORKDIR /workspace/openwrt
-          
-          # Generate toolchain config
-          RUN bash /workspace/scripts/openwrt/copy-config.sh \
-              && make defconfig \
-              && sed -i '/CONFIG_DEFAULT_luci/'d .config \
-              && echo -e "\nCONFIG_ALL=y" >> .config \
-              && echo -e "\nCONFIG_ALL_NONSHARED=y" >> .config \
-              && make defconfig > /dev/null 2>&1
-              
-          # Update and install feeds
-          RUN ./scripts/feeds update -a \
-              && ./scripts/feeds install -a
-              
-          # Compile toolchain and tools
-          RUN make defconfig \
-              && make tools/compile -j$(nproc) || make tools/compile -j1 V=s \
-              && make toolchain/compile -j$(nproc) || make toolchain/compile -j1 V=s
-              
-          # Clean up unnecessary files
-          RUN rm -rf .config* dl bin
-          
-          # Packages stage
-          FROM toolchain AS packages
-          
-          ARG DEVICE
-          ARG GITHUB_WORKSPACE=/workspace
-          
-          WORKDIR /workspace/openwrt
-          
-          # Add packages
-          RUN chmod +x /workspace/scripts/openwrt/add-package.sh \
-              && /workspace/scripts/openwrt/add-package.sh \
-              && ./scripts/feeds update -a \
-              && ./scripts/feeds install -a
-              
-          # Update configuration
-          RUN bash /workspace/scripts/openwrt/copy-config.sh \
-              && sed -i '/CONFIG_DEFAULT_luci/'d .config \
-              && make defconfig
-              
-          # Download packages
-          RUN make download -j8
-              
-          # Copy files if present
-          RUN if [ -n "$(ls -A "/workspace/files" 2>/dev/null)" ]; then \
-                  cp -Rf /workspace/files/* ./ ; \
-              fi
-              
-          # Compile packages
-          RUN make diffconfig \
-              && make target/compile -j$(nproc) IGNORE_ERRORS="m n" BUILD_LOG=1 || yes n | make target/compile -j1 V=s IGNORE_ERRORS=1 \
-              && make package/compile -j$(nproc) IGNORE_ERRORS=1 || make package/compile -j1 V=s IGNORE_ERRORS=1 \
-              && make package/index
-          
-          # Firmware stage
-          FROM packages AS firmware
-          
-          ARG DEVICE
-          ARG GITHUB_WORKSPACE=/workspace
-          
-          WORKDIR /workspace/openwrt
-          
-          # Create defaults directory
-          RUN mkdir -p files/etc/uci-defaults \
-              && cp /workspace/scripts/openwrt/init-settings.sh files/etc/uci-defaults/99-init-settings
-              
-          # Generate firmware
-          RUN make package/install -j$(nproc) || make package/install -j1 V=s \
-              && make target/install -j$(nproc) || make target/install -j1 V=s \
-              && make json_overview_image_info \
-              && make checksum
-              
-          # Clean up unnecessary files
-          RUN cd bin/targets/*/* \
-              && rm -rf packages sha256* *manifest *.sha *info *kernel.bin *sha *json
-          
-          # Prepare workspace for artifacts  
-          WORKDIR /workspace
-          
-          # Create a directory for artifacts
-          RUN mkdir -p /artifacts \
-              && cp -r openwrt/bin/targets/*/* /artifacts/ \
-              && cp -r openwrt/bin/packages /artifacts/packages
-          
-          # Output stage for packages only
-          FROM scratch AS output-packages
-          COPY --from=packages /workspace/openwrt/bin/packages /packages
-          
-          # Output stage for firmware only
-          FROM scratch AS output-firmware
-          COPY --from=firmware /artifacts /firmware
-          EOF
-          
-          echo "dockerfile_path=docker/Dockerfile" >> $GITHUB_OUTPUT
-
-  login-ghcr:
-    runs-on: ubuntu-22.04
-    needs: [generate-matrix, prepare-dockerfile]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
 
   build-cache-layers:
-    needs: [generate-matrix, prepare-dockerfile, login-ghcr]
+    needs: [generate-matrix]
     strategy:
       fail-fast: false
       matrix: ${{fromJson(needs.generate-matrix.outputs.matrix)}}
@@ -309,16 +150,14 @@ jobs:
           cd ../..
           echo "Device: ${{ matrix.device }}, Toolchain Hash: ${TOOLCHAIN_HASH:0:8}, Config Hash: ${CONFIG_HASH:0:8}"
 
-      # Copy the Dockerfile
-      - name: Copy Dockerfile
-        run: cp ${{ needs.prepare-dockerfile.outputs.dockerfile_path }} ./Dockerfile
-        
-      - name: Verify Dockerfile
+      - name: Verify Dockerfile exists
         run: |
-          echo "Checking Dockerfile..."
-          cat Dockerfile
+          if [ ! -f "build-libs/Dockerfile" ]; then
+            echo "Error: Dockerfile not found in build-libs directory"
+            exit 1
+          fi
           echo "Verifying targets in Dockerfile..."
-          grep -E "^FROM .* AS .*" Dockerfile
+          grep -E "^FROM .* AS .*" build-libs/Dockerfile
 
       - name: Check for existing images
         id: check-images
@@ -355,7 +194,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./Dockerfile
+          file: ./build-libs/Dockerfile
           push: true
           tags: ${{ env.TOOLCHAIN_IMAGE }}
           target: toolchain
@@ -369,7 +208,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ${{ needs.prepare-dockerfile.outputs.dockerfile_path }}
+          file: ./build-libs/Dockerfile
           push: true
           tags: ${{ env.PACKAGES_IMAGE }}
           target: packages
@@ -400,7 +239,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ${{ needs.prepare-dockerfile.outputs.dockerfile_path }}
+          file: ./build-libs/Dockerfile
           push: true
           tags: ${{ env.FIRMWARE_IMAGE }}
           target: firmware
