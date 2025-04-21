@@ -1,0 +1,61 @@
+name: Download, Build and Run Firmware
+
+on:
+  workflow_dispatch:
+    inputs:
+      rootfs_url:
+        description: "固件地址：为空时默认使用最新 release 中匹配 *x86-64-generic-rootfs.tar.gz 的固件"
+        required: false
+        default: ""
+
+jobs:
+  build_and_run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install jq
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+
+      - name: Determine Firmware URL
+        id: determine_url
+        run: |
+          if [ -z "${{ github.event.inputs.rootfs_url }}" ]; then
+            RELEASE_DATA=$(curl -s "https://api.github.com/repos/${{ github.repository }}/releases/latest")
+            FIRMWARE_URL=$(echo "$RELEASE_DATA" | jq -r '[.assets[] | select(.name | test("x86-64-generic-rootfs\\.tar\\.gz$"))][0].browser_download_url')
+            if [ -z "$FIRMWARE_URL" ] || [ "$FIRMWARE_URL" == "null" ]; then
+              echo "错误：在最新 release 中未找到符合模式 *x86-64-generic-rootfs.tar.gz 的固件" >&2
+              exit 1
+            fi
+          else
+            FIRMWARE_URL="${{ github.event.inputs.rootfs_url }}"
+          fi
+          echo "FIRMWARE_URL=$FIRMWARE_URL" >> $GITHUB_ENV
+
+      - name: Download Firmware
+        run: |
+          curl -L "$FIRMWARE_URL" --output firmware.tar.gz
+
+      - name: Generate Dockerfile
+        run: |
+          cat << 'EOF' > Dockerfile
+          FROM scratch
+          LABEL maintainer=action
+          ARG FIRMWARE
+          ADD ${FIRMWARE} /
+          EXPOSE 80
+          USER root
+          CMD ["/sbin/init"]
+          EOF
+          sed -i 's/^[ \t]*//' Dockerfile
+
+      - name: Build Docker Image
+        run: |
+          docker build --build-arg FIRMWARE=firmware.tar.gz -t firmware:latest .
+
+      - name: Run Docker Container
+        run: |
+          docker run -d --name firmware_container -p 80:80 firmware:latest
+          docker run --net=host cloudflare/cloudflared:latest tunnel --no-autoupdate run --token ${{ secrets.CLOUDFLARED_TOKEN_OPENWRT_WEB }} > /dev/null 2>&1

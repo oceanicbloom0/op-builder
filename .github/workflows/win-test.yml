@@ -1,0 +1,67 @@
+name: Test on Windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: "devices"
+        required: true
+        default: "x64"
+
+jobs:
+  b:
+    runs-on: windows-2019
+
+    env:
+      REPO_URL: https://github.com/coolsnowwolf/lede
+      REPO_BRANCH: master
+      TZ: Asia/Shanghai
+
+    steps:
+      - name: Init
+        run: |
+          # import reg
+          $regFileUrl = "https://raw.githubusercontent.com/Upinel/BetterRDP/refs/heads/main/UpinelBetterRDP.reg"
+          $regFilePath = "$env:TEMP\UpinelBetterRDP.reg"
+          try {
+              Invoke-WebRequest -Uri $regFileUrl -OutFile $regFilePath
+              Write-Output "Downloaded .reg file to $regFilePath"
+          }
+          catch {
+              Write-Error "Failed to download .reg file: $_"
+              exit 1
+          }
+          if (Test-Path $regFilePath) {
+              reg import $regFilePath
+              if ($LASTEXITCODE -eq 0) {
+                  Write-Output "Registry file imported successfully."
+              }
+              else {
+                  Write-Error "Failed to import the registry file."
+              }
+          }
+          else {
+              Write-Error "Registry file not found: $regFilePath"
+          }
+
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server'-name "fDenyTSConnections" -Value 0
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 1
+          Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "12345Ab@" -Force)
+          Set-ItemProperty -Path 'REGISTRY::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Lsa' -Name 'LimitBlankPasswordUse' -Value 0 -force
+
+      - name: Ngrok
+        env:
+          NGROK_TOKEN: ${{ secrets.NGROK_TOKEN }}
+        run: |
+          # choco install --yes --no-progress ngrok
+          # ngrok.exe authtoken $env:NGROK_TOKEN
+          # Start-Process -NoNewWindow -FilePath ngrok.exe -ArgumentList "tcp --region=jp 3389"
+
+      - name: Zero
+        run: |
+          choco install cloudflared -y
+          cloudflared.exe service install ${{ secrets.CLOUDFLARED_TOKEN_RDP }}
+
+          ping -t 127.0.0.1 > $null
+          Write-Host "completed"
