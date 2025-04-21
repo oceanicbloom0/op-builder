@@ -60,6 +60,7 @@ jobs:
           docker-images: false
 
       - name: Combination disk
+        continue-on-error: true
         run: |
           export ROOT_FREE_KB=$(df --block-size=1024 --output=avail / | tail -1)
           export ROOT_LOOP_KB=$(expr $ROOT_FREE_KB - 1048576)
