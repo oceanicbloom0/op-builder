@@ -15,7 +15,7 @@ on:
       openwrt_source:
         description: "OpenWRT source repository"
         required: true
-        default: "https://github.com/coolsnowwolf/lede"
+        default: "https://github.com/coolsnowwolf/lede.git"
 
       openwrt_source_branch:
         description: "Branch of the OpenWRT source repository"

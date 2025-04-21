@@ -30,29 +30,6 @@ jobs:
         id: start
         run: echo "time=$(date +%s)" >> $GITHUB_ENV
 
-      - name: Output server configuration information
-        run: |
-          echo "--------------------------CPU信息--------------------------"
-          echo "CPU物理数量：$(cat /proc/cpuinfo | grep "physical id" | sort | uniq | wc -l)"
-          echo -e "CPU核心信息：$(cat /proc/cpuinfo | grep name | cut -f2 -d: | uniq -c) \n"
-          echo "--------------------------内存信息--------------------------"
-          echo "已安装内存详细信息："
-          echo -e "$(sudo lshw -short -C memory | grep GiB) \n"
-          echo "--------------------------硬盘信息--------------------------"
-          echo "硬盘数量：$(ls /dev/sd* | grep -v [1-9] | wc -l)" && df -hT
-
-          # 获取 CPU 信息
-          cpu_info=$(cat /proc/cpuinfo | grep name | cut -f2 -d: | uniq -c)
-
-          # 配置不足的情况
-          if [[ $cpu_info == *"EPYC 7763"* ]]; then
-            echo "cpu_info contains EPYC 7763"
-            echo "RUNNER_PASS=true" >> $GITHUB_ENV
-          else
-            echo "cpu_info not contains EPYC 7763"
-            echo "RUNNER_PASS=false" >> $GITHUB_ENV
-          fi
-
       # - name: Trigger Another Workflow
       #   uses: peter-evans/repository-dispatch@v3
       #   if: ${{ env.RUNNER_PASS == 'false' }}
@@ -64,16 +41,6 @@ jobs:
       #         "variables": {
       #         }
       #       }
-
-      - name: Cancel the workflow
-        if: ${{ env.RUNNER_PASS == 'false' }}
-        run: |
-          curl -L \
-          -X POST \
-          -H "Accept: application/vnd.github+json" \
-          -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-          -H "X-GitHub-Api-Version: 2022-11-28" \
-          https://api.github.com/repos/${{ github.repository }}/actions/runs/${{github.run_id}}/cancel
 
       - name: Cancel redundant workflows under SSH
         if: ${{ (env.ssh == 'true' || env.only_ssh == 'true')  && env.DEVICE != env.running_ssh_device }}
