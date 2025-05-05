@@ -24,6 +24,7 @@ jobs:
       only_ssh: ${{github.event.client_payload.variables.only_ssh}}
       SOURCE_URL: ${{github.event.client_payload.variables.SOURCE_URL}}
       running_ssh_device: ${{ github.event.client_payload.variables.running_ssh_device }}
+      FIRMWARE_NAME: ${{ github.event.client_payload.variables.FIRMWARE_NAME }}
 
     steps:
       - name: Record Start Time
@@ -248,6 +249,8 @@ jobs:
           *sha \
           *json
 
+          bash $GITHUB_WORKSPACE/scripts/openwrt/rename-bins.sh
+
           echo "PACKAGED_OUTPUTPATH=$PWD" >> $GITHUB_ENV
 
       - name: Package Armvirt as OpenWrt
@@ -256,7 +259,7 @@ jobs:
         env:
           OPENWRT_ARMVIRT: openwrt/bin/targets/*/*/*rootfs.tar.gz
           PACKAGE_SOC: s905d
-          WHOAMI: OpenWrt
+          WHOAMI: ${{ env.FIRMWARE_NAME }}
 
       - name: Generate variables
         run: |
@@ -279,7 +282,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: "${{ env.DATE }} | ${{ env.CURRENT_BRANCH }}"
+          name: ${{ env.FIRMWARE_NAME }}
           tag_name: bins
           body: |
             The build took ${{ env.build_duration }}.

@@ -37,6 +37,11 @@ on:
         required: true
         default: "Toolchain"
 
+      FIRMWARE_NAME:
+        description: ""
+        required: true
+        default: "PureWRT"
+
       ssh:
         description: "Enable SSH"
         required: true
@@ -268,6 +273,7 @@ jobs:
                 "ssh": "${{inputs.ssh}}",
                 "only_ssh": "${{inputs.only_ssh}}",
                 "SOURCE_URL": "${{env.SOURCE_URL}}",
-                "running_ssh_device":"${{inputs.running_ssh_device}}"
+                "running_ssh_device":"${{inputs.running_ssh_device}}",
+                "FIRMWARE_NAME":"${{inputs.FIRMWARE_NAME}}"
               }
             }
