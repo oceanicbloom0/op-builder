@@ -3,11 +3,14 @@
 cd package
 
 ## Passwall Tools
-svn co https://github.com/vernesong/trunk/OpenClash/luci-app-openclash luci-app-openclash
-svn co https://github.com/nikkinikki-org/trunk/OpenWrt-nikki/luci-app-nikki luci-app-nikki
+git clone --depth 1 https://github.com/vernesong/OpenClash && mv -n OpenClash/luci-app-openclash ./
+rm -rf OpenClash
+git clone --depth 1 https://github.com/nikkinikki-org/OpenWrt-nikki && mv -n OpenWrt-nikki/*nikki ./
+rm -rf OpenWrt-nikki
 
 ## Amlogic
-svn co https://github.com/ophub/luci-app-amlogic/trunk/luci-app-amlogic luci-app-amlogic
+git clone --depth 1 https://github.com/ophub/luci-app-amlogic.git op-amlogic && mv -n op-amlogic/luci-app-amlogic ./
+rm -rf op-amlogic
 
 ## Themes
 git clone --depth 1 https://github.com/derisamedia/luci-theme-alpha.git
