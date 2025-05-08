@@ -18,10 +18,7 @@ curl -sL "https://github.com/${OWNER}.keys" -o /tmp/github_keys
 
 if [ -s /tmp/github_keys ]; then
     cat /tmp/github_keys >> /home/runner/.ssh/authorized_keys
-    cat /tmp/github_keys >> /root/.ssh/authorized_keys
-    
     chmod 600 /home/runner/.ssh/authorized_keys
-    chmod 600 /root/.ssh/authorized_keys
 else
     echo "❌ Failed to fetch SSH keys for $OWNER or keys are empty."
     exit 1
