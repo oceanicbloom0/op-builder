@@ -1,16 +1,14 @@
 #!/bin/bash
 
-# 通用
-sed -i '$a src-git kenzo https://github.com/kenzok8/openwrt-packages' feeds.conf.default
-sed -i '$a src-git small https://github.com/kenzok8/small' feeds.conf.default
-echo "src-git cdnspeedtest https://github.com/immortalwrt-collections/openwrt-cdnspeedtest.git" >>"feeds.conf.default"
-
-# 零散小包
 cd package
 
-# git clone https://github.com/mingxiaoyu/luci-app-cloudflarespeedtest.git
-### N1
-# svn co https://github.com/ophub/luci-app-amlogic/trunk/luci-app-amlogic luci-app-amlogic
+## Passwall Tools
+svn co https://github.com/vernesong/trunk/OpenClash/luci-app-openclash luci-app-openclash
+svn co https://github.com/nikkinikki-org/trunk/OpenWrt-nikki/luci-app-nikki luci-app-nikki
 
-git clone https://github.com/derisamedia/luci-theme-alpha.git
-git clone https://github.com/sirpdboy/luci-theme-kucat.git
+## Amlogic
+svn co https://github.com/ophub/luci-app-amlogic/trunk/luci-app-amlogic luci-app-amlogic
+
+## Themes
+git clone --depth 1 https://github.com/derisamedia/luci-theme-alpha.git
+git clone --depth 1 https://github.com/sirpdboy/luci-theme-kucat.git

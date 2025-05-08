@@ -100,7 +100,7 @@ jobs:
         env:
           CLOUDFLARED_TOKEN: ${{ secrets.CLOUDFLARED_TOKEN }}
         run: |
-          /bin/bash $GITHUB_WORKSPACE/scripts/ssh.sh > /dev/null 2>&1
+          /bin/bash $GITHUB_WORKSPACE/scripts/ssh.sh ${{ github.repository_owner }} > /dev/null 2>&1
 
       - name: Initialization environment
         env:
@@ -108,14 +108,8 @@ jobs:
         run: |
           sudo timedatectl set-timezone "Asia/Shanghai"
 
-          ulimit -u 10000
-          ulimit -n 4096
-          ulimit -d unlimited
-          ulimit -m unlimited
-          ulimit -s unlimited
-          ulimit -t unlimited
-          ulimit -v unlimited       
-           
+          ulimit -u 10000 && ulimit -n 4096 && ulimit -d unlimited && ulimit -m unlimited && ulimit -s unlimited && ulimit -t unlimited && ulimit -v unlimited
+
           sudo apt update -y
           sudo apt install -y ack antlr3 aria2 asciidoc autoconf automake autopoint binutils bison build-essential \
           bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib \
@@ -199,7 +193,7 @@ jobs:
         env:
           CLOUDFLARED_TOKEN: ${{ secrets.CLOUDFLARED_TOKEN }}
         run: |
-          /bin/bash $GITHUB_WORKSPACE/scripts/ssh.sh > /dev/null 2>&1
+          /bin/bash $GITHUB_WORKSPACE/scripts/ssh.sh ${{ github.repository_owner }} > /dev/null 2>&1
 
       - name: Defconfig
         run: |

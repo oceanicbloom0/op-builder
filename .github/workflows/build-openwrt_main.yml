@@ -40,7 +40,7 @@ on:
       FIRMWARE_NAME:
         description: ""
         required: true
-        default: "PureWRT"
+        default: "DokiDoki"
 
       ssh:
         description: "Enable SSH"
