@@ -165,7 +165,7 @@ jobs:
 
             grep -i "$pattern" .config | grep -v '^#' \
               | sed '/INCLUDE/d; s/CONFIG_PACKAGE_/、/g; s/=y//g' \
-              | awk '{ print NR "、" $0 }'
+              | awk '{ print NR $0 }'
 
             echo ""
           }
