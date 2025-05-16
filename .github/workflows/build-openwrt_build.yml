@@ -157,13 +157,17 @@ jobs:
           make defconfig
 
           SELECTED_PLUGINS=$(
-            grep -i CONFIG_PACKAGE_luci-app .config | grep -v '^#'
-            grep -i CONFIG_PACKAGE_luci-theme .config | grep -v '^#'
-          ) | sed '/INCLUDE/d; /qbittorrent_static/d; s/CONFIG_PACKAGE_/、/g; s/=y//g' \
-            | awk '{ print "\t" NR "、" $0 }'
-
+            {
+              grep -i CONFIG_PACKAGE_luci-app .config | grep -v '^#'
+              grep -i CONFIG_PACKAGE_luci-theme .config | grep -v '^#'
+            } | sed '/INCLUDE/d; /qbittorrent_static/d; s/CONFIG_PACKAGE_/、/g; s/=y//g' \
+              | awk '{ print NR $0 }'
+          )
+                  
+          echo "$SELECTED_PLUGINS"
+                  
           echo "SELECTED_PLUGINS<<EOF" >> "$GITHUB_ENV"
-          printf '%s\n' "$SELECTED_PLUGINS" >> "$GITHUB_ENV"
+          echo "$SELECTED_PLUGINS" >> "$GITHUB_ENV"
           echo "EOF" >> "$GITHUB_ENV"
 
           echo "${{ env.SELECTED_PLUGINS }}"
