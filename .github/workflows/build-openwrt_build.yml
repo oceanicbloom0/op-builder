@@ -156,21 +156,30 @@ jobs:
           cd $OPENWRT_PATH
           make defconfig
 
-          SELECTED_PLUGINS=$(
-            {
-              grep -i CONFIG_PACKAGE_luci-app .config | grep -v '^#'
-              grep -i CONFIG_PACKAGE_luci-theme .config | grep -v '^#'
-            } | sed '/INCLUDE/d; /qbittorrent_static/d; s/CONFIG_PACKAGE_/、/g; s/=y//g' \
-              | awk '{ print NR $0 }'
-          )
-                  
-          echo "$SELECTED_PLUGINS"
-                  
-          echo "SELECTED_PLUGINS<<EOF" >> "$GITHUB_ENV"
-          echo "$SELECTED_PLUGINS" >> "$GITHUB_ENV"
-          echo "EOF" >> "$GITHUB_ENV"
+          # 工具函数：格式化输出函数
+          append_section() {
+            local title="$1"
+            local pattern="$2"
 
-          echo "${{ env.SELECTED_PLUGINS }}"
+            echo "### $title"
+
+            grep -i "$pattern" .config | grep -v '^#' \
+              | sed '/INCLUDE/d; s/CONFIG_PACKAGE_/、/g; s/=y//g' \
+              | awk '{ print NR "、" $0 }'
+
+            echo ""
+          }
+
+          # 插件部分
+          append_section "插件" "CONFIG_PACKAGE_luci-app"
+
+          # 主题部分
+          append_section "主题" "CONFIG_PACKAGE_luci-theme"
+
+          # 原始配置（插件 + 主题）
+          echo "### 配置（luci）"
+          grep -i CONFIG_PACKAGE_luci-app .config | grep -v '^#'
+          grep -i CONFIG_PACKAGE_luci-theme .config | grep -v '^#'
 
       - name: Make download
         run: |
@@ -268,6 +277,9 @@ jobs:
           seconds=$((duration % 60))
           echo "build_duration=${minutes} minutes and ${seconds} seconds" >> $GITHUB_ENV
 
+          # Example
+          echo "The build took ${{ env.build_duration }}."
+
       - name: Upload firmware to release
         uses: softprops/action-gh-release@v2
         env:
@@ -275,8 +287,7 @@ jobs:
         with:
           name: ${{ env.FIRMWARE_NAME }}
           tag_name: bins
-          body: |
-            The build took ${{ env.build_duration }}.
+          body_path: ${{ github.workspace }}/release-text
           files: ${{ env.PACKAGED_OUTPUTPATH }}/*
 
       # - name: TG Notification - ✔️
