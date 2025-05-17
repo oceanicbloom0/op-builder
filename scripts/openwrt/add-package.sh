@@ -5,7 +5,7 @@ cd package
 ## Passwall Tools
 git clone --depth 1 https://github.com/vernesong/OpenClash && mv -n OpenClash/luci-app-openclash ./
 rm -rf OpenClash
-git clone --depth 1 https://github.com/nikkinikki-org/OpenWrt-nikki && mv -n OpenWrt-nikki/luci-app-nikki ./
+git clone --depth 1 https://github.com/nikkinikki-org/OpenWrt-nikki && mv -n OpenWrt-nikki/luci-app-nikki OpenWrt-nikki/nikki ./
 rm -rf OpenWrt-nikki
 
 ## Amlogic
