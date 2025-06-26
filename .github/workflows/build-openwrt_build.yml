@@ -139,15 +139,8 @@ jobs:
       - name: Add packages
         run: |
           cd $OPENWRT_PATH          
-          # chmod +x $GITHUB_WORKSPACE/scripts/openwrt/add-package.sh
-          # $GITHUB_WORKSPACE/scripts/openwrt/add-package.sh
-          
-          # Use external script
-          cd package
-          wget https://github.com/kenzok8/small-package/raw/refs/heads/main/.github/diy/main.sh
-          chmod +x main.sh
-          ./main.sh
-
+          chmod +x $GITHUB_WORKSPACE/scripts/openwrt/add-package.sh
+          $GITHUB_WORKSPACE/scripts/openwrt/add-package.sh
           git pull
           ./scripts/feeds update -a
           ./scripts/feeds install -a
