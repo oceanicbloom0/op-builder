@@ -22,7 +22,7 @@ else
     exit 1
 fi
 
-docker run --net=host cloudflare/cloudflared:latest tunnel --no-autoupdate run --token $CLOUDFLARED_TOKEN
+docker run --net=host cloudflare/cloudflared:latest tunnel --no-autoupdate run --token $CLOUDFLARED_TOKEN || true
 
 # 运行后续任务
 echo "[SSH] 继续运行后续任务..."
