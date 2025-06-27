@@ -62,10 +62,10 @@ git_clone https://github.com/kiddin9/aria2
 git_clone https://github.com/kiddin9/luci-app-baidupcs-web
 
 # 文件同步与分享
-git_clone https://github.com/kiddin9/autoshare && mvdir autoshare
+git_clone https://github.com/kiddin9/autoshare && mvdir autoshare || exit 1
 
 # OpenVPN
-git_clone https://github.com/kiddin9/openwrt-openvpn && mvdir openwrt-openvpn
+git_clone https://github.com/kiddin9/openwrt-openvpn && mvdir openwrt-openvpn || exit 1
 
 # Xray
 git_clone https://github.com/yichya/luci-app-xray
@@ -87,7 +87,7 @@ git_clone https://github.com/ElvenP/luci-app-onliner
 git_clone https://github.com/rufengsuixing/luci-app-usb3disable
 
 # IPTV 辅助
-git_clone https://github.com/riverscn/openwrt-iptvhelper && mvdir openwrt-iptvhelper
+git_clone https://github.com/riverscn/openwrt-iptvhelper && mvdir openwrt-iptvhelper || exit 1
 
 # MentoHUST
 git_clone https://github.com/KyleRicardo/MentoHUST-OpenWrt-ipk
@@ -102,7 +102,7 @@ git_clone https://github.com/project-lede/luci-app-godproxy
 # 微信推送 (18.06)
 git_clone -b openwrt-18.06 https://github.com/tty228/luci-app-wechatpush
 
-git_clone https://github.com/4IceG/luci-app-sms-tool smstool && mvdir smstool
+git_clone https://github.com/4IceG/luci-app-sms-tool smstool && mvdir smstool || exit 1
 
 # 迅雷下载
 git_clone https://github.com/silime/luci-app-xunlei
@@ -121,9 +121,9 @@ git_clone https://github.com/esirplayground/LingTiGameAcc
 
 git_clone https://github.com/esirplayground/luci-app-LingTiGameAcc
 
-git_clone https://github.com/brvphoenix/luci-app-wrtbwmon wrtbwmon1 && mvdir wrtbwmon1
+git_clone https://github.com/brvphoenix/luci-app-wrtbwmon wrtbwmon1 && mvdir wrtbwmon1 || exit 1
 
-git_clone https://github.com/brvphoenix/wrtbwmon wrtbwmon2 && mvdir wrtbwmon2
+git_clone https://github.com/brvphoenix/wrtbwmon wrtbwmon2 && mvdir wrtbwmon2 || exit 1
 
 # 主题与界面配置
 git_clone https://github.com/jerrykuku/luci-theme-argon
@@ -150,15 +150,15 @@ git_clone https://github.com/jefferymvp/luci-app-koolproxyR
 git_clone https://github.com/wolandmaster/luci-app-rtorrent
 git_clone https://github.com/NateLol/luci-app-oled
 git_clone https://github.com/hubbylei/luci-app-clash
-git_clone https://github.com/destan19/OpenAppFilter && mvdir OpenAppFilter
+git_clone https://github.com/destan19/OpenAppFilter && mvdir OpenAppFilter || exit 1
 git_clone https://github.com/lvqier/luci-app-dnsmasq-ipset
 git_clone https://github.com/walkingsky/luci-wifidog luci-app-wifidog
-git_clone https://github.com/CCnut/feed-netkeeper && mvdir feed-netkeeper
+git_clone https://github.com/CCnut/feed-netkeeper && mvdir feed-netkeeper || exit 1
 git_clone https://github.com/sensec/luci-app-udp2raw
-git_clone https://github.com/LGA1150/openwrt-sysuh3c && mvdir openwrt-sysuh3c
+git_clone https://github.com/LGA1150/openwrt-sysuh3c && mvdir openwrt-sysuh3c || exit 1
 
 # 自动构建集成
-git_clone https://github.com/Hyy2001X/AutoBuild-Packages && rm -rf AutoBuild-Packages/luci-app-adguardhome && mvdir AutoBuild-Packages
+git_clone https://github.com/Hyy2001X/AutoBuild-Packages && rm -rf AutoBuild-Packages/luci-app-adguardhome && mvdir AutoBuild-Packages || exit 1
 
 # Dockerman & Cupsd
 git_clone https://github.com/lisaac/luci-app-dockerman dockerman && mv -n dockerman/applications/* ./ && rm -rf dockerman
