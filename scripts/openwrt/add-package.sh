@@ -2,8 +2,15 @@
 
 # 定义辅助函数
 function git_clone() {
-    git clone --depth 1 "$1" "$2" || true
+    local repo="$1"
+    local target="${2:-$(basename "$repo" .git)}"
+    echo "🔽 正在克隆：$repo → $target"
+    git clone --depth 1 "$repo" "$target" || {
+        echo "❌ 克隆失败：$repo" >&2
+        exit 1
+    }
 }
+
 function git_sparse_clone() {
     branch="$1" rurl="$2" localdir="$3" && shift 3
     git clone -b "$branch" --depth 1 --filter=blob:none --sparse "$rurl" "$localdir"
