@@ -87,12 +87,11 @@ git clone --depth 1 https://github.com/NateLol/luci-app-beardropper
 git clone --depth 1 https://github.com/yaof2/luci-app-ikoolproxy
 git clone --depth 1 https://github.com/project-lede/luci-app-godproxy
 
-# 微信推送 (18.06)
-git clone --depth 1 -b openwrt-18.06 https://github.com/tty228/luci-app-wechatpush
+# 微信推送
+git clone --depth 1 https://github.com/tty228/luci-app-wechatpush
 
 git clone --depth 1 https://github.com/4IceG/luci-app-sms-tool smstool && mvdir smstool || exit 1
 
-# 迅雷下载
 git clone --depth 1 https://github.com/silime/luci-app-xunlei
 
 git clone --depth 1 https://github.com/BCYDTZ/luci-app-UUGameAcc
@@ -145,19 +144,15 @@ git clone --depth 1 https://github.com/CCnut/feed-netkeeper && mvdir feed-netkee
 git clone --depth 1 https://github.com/sensec/luci-app-udp2raw
 git clone --depth 1 https://github.com/LGA1150/openwrt-sysuh3c && mvdir openwrt-sysuh3c || exit 1
 
-# 自动构建集成
-git clone --depth 1 https://github.com/Hyy2001X/AutoBuild-Packages && rm -rf AutoBuild-Packages/luci-app-adguardhome && mvdir AutoBuild-Packages || exit 1
-
 # Dockerman & Cupsd
 git clone --depth 1 https://github.com/lisaac/luci-app-dockerman dockerman && mv -n dockerman/applications/* ./ && rm -rf dockerman
 git clone --depth 1 https://github.com/gdck/luci-app-cupsd cupsd1 && mv -n cupsd1/luci-app-cupsd cupsd1/cups/cups ./ && rm -rf cupsd1
 
-# 墙纸 & 工具
+# 依赖 & 工具
 git clone --depth 1 https://github.com/kenzok8/wall && mv -n wall/* ./ && rm -rf wall
 git clone --depth 1 https://github.com/peter-tank/luci-app-fullconenat
 
 # 更多集成包
-git clone --depth 1 https://github.com/sirpdboy/sirpdboy-package && mv -n sirpdboy-package/luci-app-dockerman ./ && rm -rf sirpdboy-package
 git clone --depth 1 https://github.com/sundaqiang/openwrt-packages && mv -n openwrt-packages/luci-* ./ && rm -rf openwrt-packages
 
 # V2raya & 主题
