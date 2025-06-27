@@ -164,7 +164,7 @@ git_clone https://github.com/kenzok78/openwrt-minisign
 git_clone https://github.com/kenzok78/luci-theme-argone
 git_clone https://github.com/kenzok78/luci-app-argone-config
 git_clone https://github.com/kenzok78/luci-app-adguardhome
-gih_clone https://github.com/kenzok78/luci-theme-design
+git_clone https://github.com/kenzok78/luci-theme-design
 git_clone https://github.com/kenzok78/luci-app-design-config
 
 exit 0
