@@ -15,7 +15,24 @@ function git_sparse_clone() {
     rm -rf "$localdir"
 }
 function mvdir() {
-    mv -n "$(find "$1"/* -maxdepth 0 -type d)" ./
+    if [ -z "$1" ]; then
+        echo "❌ mvdir: 缺少目录参数" >&2
+        exit 1
+    fi
+
+    local subdirs
+    subdirs=$(find "$1"/* -maxdepth 0 -type d 2>/dev/null)
+
+    if [ -z "$subdirs" ]; then
+        echo "ℹ️ mvdir: 无子目录，跳过 $1"
+        return 0
+    fi
+
+    mv -n $subdirs ./ || {
+        echo "❌ mvdir: 移动失败，目录 $1" >&2
+        exit 1
+    }
+
     rm -rf "$1"
 }
 
