@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  generate-matrix:
+  generate-matrices:
     runs-on: ubuntu-22.04
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
@@ -26,22 +26,45 @@ jobs:
             echo "Error: toolchain-config.json not found in repository root"
             exit 1
           fi
-          matrix_json=$(jq -c '{ include: [ .[] | { repository: .openwrt_source, branch: .openwrt_source_branch, tag: .TOOLCHAIN_TAG } ] }' toolchain-config.json)
+          # 获取设备列表
+          cd configs
+          devices=()
+          for d in */; do
+            if [ "$d" != "STANDALONE_CONF/" ]; then
+              devices+=("${d%/}")
+            fi
+          done
+          if [ -d "STANDALONE_CONF" ]; then
+            cd STANDALONE_CONF
+            for d in */; do
+              devices+=("${d%/}")
+            done
+            cd ../..
+          fi
+          devices_json=$(printf '%s\n' "${devices[@]}" | jq -R . | jq -s .)
+          # 生成矩阵
+          matrix_json=$(jq -n --argjson configs "$(cat toolchain-config.json)" --argjson devices "$devices_json" '
+            $configs | map(. as $c | $devices | map({
+              repository: $c.openwrt_source,
+              branch: $c.openwrt_source_branch,
+              tag: $c.TOOLCHAIN_TAG,
+              device: .
+            })) | add | { include: . }
+          ')
           echo "matrix=$matrix_json" >> $GITHUB_OUTPUT
           echo $matrix_json
 
   build-toolchain:
-    needs: generate-matrix
+    needs: generate-matrices
     strategy:
       fail-fast: false
-      matrix: ${{ fromJson(needs.generate-matrix.outputs.matrix) }}
+      matrix: ${{ fromJson(needs.generate-matrices.outputs.matrix) }}
     runs-on: ubuntu-22.04
     permissions:
       contents: write
       actions: write
     env:
-      REPO_NAME: ${{ github.event.repository.name }}
-      TOOLCHAIN_IMAGE: toolchain-${{ github.event.repository.name }}-${{ matrix.branch }}
+      DEVICE: ${{ matrix.device }}
 
     steps:
       - name: Checkout
@@ -53,6 +76,26 @@ jobs:
           git clone ${{ matrix.repository }} -b ${{ matrix.branch }} openwrt
           cd openwrt
           echo "OPENWRT_PATH=$PWD" >> $GITHUB_ENV
+
+      - name: Generate variables
+        id: env
+        run: |
+          cd $OPENWRT_PATH
+          export CURRENT_BRANCH="$(git symbolic-ref --short HEAD)"
+          echo "CURRENT_BRANCH=$CURRENT_BRANCH" >> $GITHUB_ENV
+          echo "CURRENT_BRANCH=$CURRENT_BRANCH" >> $GITHUB_OUTPUT
+          export SOURCE_REPO="$(echo ${{ matrix.repository }} | awk -F '/' '{print $(NF)}')"
+          echo "SOURCE_REPO=$SOURCE_REPO" >> $GITHUB_ENV
+          echo "SOURCE_REPO=$SOURCE_REPO" >> $GITHUB_OUTPUT
+          export DEVICE_TARGET=$(cat .config | grep CONFIG_TARGET_BOARD | awk -F '"' '{print $2}' || echo "")
+          echo "DEVICE_TARGET=$DEVICE_TARGET" >> $GITHUB_ENV
+          echo "DEVICE_TARGET=$DEVICE_TARGET" >> $GITHUB_OUTPUT
+          export DEVICE_SUBTARGET=$(cat .config | grep CONFIG_TARGET_SUBTARGET | awk -F '"' '{print $2}' || echo "")
+          echo "DEVICE_SUBTARGET=$DEVICE_SUBTARGET" >> $GITHUB_ENV
+          echo "DEVICE_SUBTARGET=$DEVICE_SUBTARGET" >> $GITHUB_OUTPUT
+          export TOOLCHAIN_IMAGE="toolchain-$SOURCE_REPO-${{ matrix.branch }}-${{ matrix.device }}"
+          echo "TOOLCHAIN_IMAGE=$TOOLCHAIN_IMAGE" >> $GITHUB_ENV
+          echo "TOOLCHAIN_IMAGE=$TOOLCHAIN_IMAGE" >> $GITHUB_OUTPUT
 
       - name: Compare Toolchain Hash
         id: hash
@@ -78,7 +121,7 @@ jobs:
           git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev \
           libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libreadline-dev libssl-dev libtool lrzsz \
           mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf python2.7 python3 python3-pip libpython3-dev qemu-utils \
-          rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev python3-pyelftools
+          rsync scons squashfs squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev python3-pyelftools
           sudo -E apt-get -qq install aria2 clang clangd ecj lib32gcc-s1 libfuse-dev libncursesw5 \
           libpython3-dev lld lldb python3-ply re2c
           sudo -E apt-get -qq autoremove --purge
@@ -131,7 +174,7 @@ jobs:
           name: Toolchain
           allowUpdates: true
           replacesArtifacts: true
-          tag: ${{ env.TOOLCHAIN_TAG }}
+          tag: ${{ matrix.tag }}
           token: ${{ secrets.GITHUB_TOKEN }}
           artifacts: output/*
           body: toolchain
