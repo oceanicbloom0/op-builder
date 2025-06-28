@@ -46,17 +46,11 @@ git clone --depth 1 https://github.com/peter-tank/luci-app-autorepeater
 # 下载工具
 git clone --depth 1 https://github.com/kiddin9/aria2
 
-# 百度网盘 Web 管理
-git clone --depth 1 https://github.com/kiddin9/luci-app-baidupcs-web
-
 # 文件同步与分享
 git clone --depth 1 https://github.com/kiddin9/autoshare && mvdir autoshare || exit 1
 
 # OpenVPN
 git clone --depth 1 https://github.com/kiddin9/openwrt-openvpn && mvdir openwrt-openvpn || exit 1
-
-# Xray
-git clone --depth 1 https://github.com/yichya/luci-app-xray
 
 git clone --depth 1 https://github.com/Lienol/openwrt-package
 
@@ -118,8 +112,6 @@ git clone --depth 1 https://github.com/jerrykuku/luci-app-argon-config
 
 git clone --depth 1 https://github.com/jerrykuku/luci-app-ttnode
 
-git clone --depth 1 https://github.com/jerrykuku/luci-app-go-aliyundrive-webdav
-
 git clone --depth 1 https://github.com/jerrykuku/lua-maxminddb
 
 # ChatGPT Web 接口
@@ -151,9 +143,6 @@ git clone --depth 1 https://github.com/gdck/luci-app-cupsd cupsd1 && mv -n cupsd
 # 依赖 & 工具
 git clone --depth 1 https://github.com/kenzok8/wall && mv -n wall/* ./ && rm -rf wall
 git clone --depth 1 https://github.com/peter-tank/luci-app-fullconenat
-
-# 更多集成包
-git clone --depth 1 https://github.com/sundaqiang/openwrt-packages && mv -n openwrt-packages/luci-* ./ && rm -rf openwrt-packages
 
 # V2raya & 主题
 git clone --depth 1 https://github.com/zxlhhyccc/luci-app-v2raya
