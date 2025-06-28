@@ -1,0 +1,137 @@
+name: Build Toolchain
+
+on:
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+
+jobs:
+  generate-matrix:
+    runs-on: ubuntu-22.04
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install jq
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y jq
+          sudo apt-get clean
+
+      - id: set-matrix
+        run: |
+          if [ ! -f "toolchain-config.json" ]; then
+            echo "Error: toolchain-config.json not found in repository root"
+            exit 1
+          fi
+          matrix_json=$(jq -c '{ include: [ .[] | { repository: .openwrt_source, branch: .openwrt_source_branch, tag: .TOOLCHAIN_TAG } ] }' toolchain-config.json)
+          echo "matrix=$matrix_json" >> $GITHUB_OUTPUT
+          echo $matrix_json
+
+  build-toolchain:
+    needs: generate-matrix
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.generate-matrix.outputs.matrix) }}
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+      actions: write
+    env:
+      REPO_NAME: ${{ github.event.repository.name }}
+      TOOLCHAIN_IMAGE: toolchain-${{ github.event.repository.name }}-${{ matrix.branch }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Clone code
+        id: clone
+        run: |
+          git clone ${{ matrix.repository }} -b ${{ matrix.branch }} openwrt
+          cd openwrt
+          echo "OPENWRT_PATH=$PWD" >> $GITHUB_ENV
+
+      - name: Compare Toolchain Hash
+        id: hash
+        run: |
+          cd $OPENWRT_PATH
+          export CURRENT_HASH=$(git log --pretty=tformat:"%H" -n1 tools toolchain)
+          echo "CURRENT_HASH=$CURRENT_HASH" >> $GITHUB_ENV
+          export CACHE_HASH=$(curl -fSsL -k https://github.com/$GITHUB_REPOSITORY/releases/download/${{ matrix.tag }}/$TOOLCHAIN_IMAGE.hash || echo "")
+          echo "CACHE_HASH=$CACHE_HASH" >> $GITHUB_ENV
+          if [ -z "$CACHE_HASH" ] || [ "$CURRENT_HASH" != "$CACHE_HASH" ]; then
+            echo "REBUILD_TOOLCHAIN=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Install compilation dependencies
+        if: steps.hash.outputs.REBUILD_TOOLCHAIN == 'true'
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo rm -rf /etc/apt/sources.list.d/*
+          sudo -E apt-get -qq update
+          sudo apt install -y ack antlr3 aria2 asciidoc autoconf automake autopoint binutils bison build-essential \
+          bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib \
+          git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev \
+          libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libreadline-dev libssl-dev libtool lrzsz \
+          mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf python2.7 python3 python3-pip libpython3-dev qemu-utils \
+          rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev python3-pyelftools
+          sudo -E apt-get -qq install aria2 clang clangd ecj lib32gcc-s1 libfuse-dev libncursesw5 \
+          libpython3-dev lld lldb python3-ply re2c
+          sudo -E apt-get -qq autoremove --purge
+          sudo -E apt-get -qq clean
+          sudo timedatectl set-timezone "Asia/Shanghai"
+
+      - name: Generate Toolchain Configuration
+        if: steps.hash.outputs.REBUILD_TOOLCHAIN == 'true'
+        run: |
+          bash $GITHUB_WORKSPACE/scripts/openwrt/copy-config.sh
+          cd $OPENWRT_PATH && make defconfig
+          sed -i '/CONFIG_DEFAULT_luci/'d .config
+          echo -e "\nCONFIG_ALL=y" >> $OPENWRT_PATH/.config
+          echo -e "\nCONFIG_ALL_NONSHARED=y" >> $OPENWRT_PATH/.config
+          make defconfig > /dev/null 2>&1
+
+      - name: Install Feeds
+        if: steps.hash.outputs.REBUILD_TOOLCHAIN == 'true'
+        run: |
+          cd $OPENWRT_PATH
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Compile Tools
+        if: steps.hash.outputs.REBUILD_TOOLCHAIN == 'true'
+        run: |
+          cd $OPENWRT_PATH
+          make tools/compile -j$(nproc) || make tools/compile -j1 V=s
+
+      - name: Compile Toolchain
+        if: steps.hash.outputs.REBUILD_TOOLCHAIN == 'true'
+        run: |
+          cd $OPENWRT_PATH
+          make toolchain/compile -j$(nproc) || make toolchain/compile -j1 V=s
+          rm -rf .config* dl bin
+
+      - name: Generate Toolchain Image
+        if: steps.hash.outputs.REBUILD_TOOLCHAIN == 'true'
+        run: |
+          mksquashfs $OPENWRT_PATH $TOOLCHAIN_IMAGE -force-gid 1001 -force-uid 1001 -comp zstd
+          mkdir -p $GITHUB_WORKSPACE/output
+          split -d -b 1900M $TOOLCHAIN_IMAGE $GITHUB_WORKSPACE/output/$TOOLCHAIN_IMAGE.img.
+          rm $TOOLCHAIN_IMAGE
+          echo $CURRENT_HASH > $GITHUB_WORKSPACE/output/$TOOLCHAIN_IMAGE.hash
+
+      - name: Upload Toolchain Image to Release
+        if: steps.hash.outputs.REBUILD_TOOLCHAIN == 'true'
+        uses: ncipollo/release-action@main
+        with:
+          name: Toolchain
+          allowUpdates: true
+          replacesArtifacts: true
+          tag: ${{ env.TOOLCHAIN_TAG }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          artifacts: output/*
+          body: toolchain
