@@ -42,8 +42,8 @@ jobs:
             cd ../..
           fi
           devices_json=$(printf '%s\n' "${devices[@]}" | jq -R . | jq -s .)
-          # 生成矩阵
-          matrix_json=$(jq -n --argjson configs "$(cat toolchain-config.json)" --argjson devices "$devices_json" '
+          # 生成矩阵，确保单行输出
+          matrix_json=$(jq -c -n --argjson configs "$(cat toolchain-config.json)" --argjson devices "$devices_json" '
             $configs | map(. as $c | $devices | map({
               repository: $c.openwrt_source,
               branch: $c.openwrt_source_branch,
@@ -51,6 +51,8 @@ jobs:
               device: .
             })) | add | { include: . }
           ')
+          # 调试输出
+          echo "matrix_json starts with: ${matrix_json:0:10}"
           echo "matrix=$matrix_json" >> $GITHUB_OUTPUT
           echo $matrix_json
 
@@ -103,7 +105,7 @@ jobs:
           cd $OPENWRT_PATH
           export CURRENT_HASH=$(git log --pretty=tformat:"%H" -n1 tools toolchain)
           echo "CURRENT_HASH=$CURRENT_HASH" >> $GITHUB_ENV
-          export CACHE_HASH=$(curl -fSsL -k [invalid url, do not cite] matrix.tag }}/$TOOLCHAIN_IMAGE.hash || echo "")
+          export CACHE_HASH=$(curl -fSsL -k https://github.com/$GITHUB_REPOSITORY/releases/download/${{ matrix.tag }}/$TOOLCHAIN_IMAGE.hash || echo "")
           echo "CACHE_HASH=$CACHE_HASH" >> $GITHUB_ENV
           if [ -z "$CACHE_HASH" ] || [ "$CURRENT_HASH" != "$CACHE_HASH" ]; then
             echo "REBUILD_TOOLCHAIN=true" >> $GITHUB_OUTPUT
