@@ -51,7 +51,8 @@ jobs:
               device: .
             })) | add | { include: . }
           ')
-          echo "matrix=$matrix_json" >> $GITHUB_OUTPUT
+          encoded=$(echo "$matrix_json" | base64 -w 0)
+          echo "matrix_json_b64=$encoded" >> "$GITHUB_OUTPUT"
           echo $matrix_json
 
   build-toolchain:
