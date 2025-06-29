@@ -180,8 +180,8 @@ jobs:
 
           # 原始配置（插件 + 主题）
           echo "### 配置（luci）"
-          grep -i CONFIG_PACKAGE_luci-app .config | grep -v '^#'
-          grep -i CONFIG_PACKAGE_luci-theme .config | grep -v '^#'
+          grep -i CONFIG_PACKAGE_luci-app .config | grep -v '^#' || true
+          grep -i CONFIG_PACKAGE_luci-theme .config | grep -v '^#' || true
 
       - name: Make download
         run: |
