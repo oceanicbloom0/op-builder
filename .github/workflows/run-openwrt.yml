@@ -37,7 +37,7 @@ jobs:
           ARG FIRMWARE
           ADD ${FIRMWARE} /
           EXPOSE 80
-          USER root
+          # USER root
           CMD ["/sbin/init"]
           EOF
           sed -i 's/^[ \t]*//' Dockerfile
