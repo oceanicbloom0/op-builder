@@ -93,7 +93,7 @@ jobs:
           git init
           git remote add origin https://github.com/$GITHUB_REPOSITORY
           git fetch
-          git checkout -t origin/$CURRENT_BRANCH
+          git checkout -t origin/${{ github.ref_name }}
 
       - name: SSH
         if: ${{ env.only_ssh == 'true'}}
