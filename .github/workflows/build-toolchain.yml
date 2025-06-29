@@ -22,28 +22,43 @@ jobs:
 
       - id: set-matrix
         run: |
-          if [ ! -f "toolchain-config.json" ]; then
-            echo "Error: toolchain-config.json not found in repository root"
+          # 记录根目录
+          ROOT_DIR=$(pwd)
+
+          # 检查 toolchain-config.json 是否存在
+          if [ ! -f "$ROOT_DIR/toolchain-config.json" ]; then
+            echo "Error: toolchain-config.json not found in $ROOT_DIR"
             exit 1
           fi
-          # 获取设备列表
+
+          # 进入 configs 目录
           cd configs
+
+          # 获取设备列表
           devices=()
           for d in */; do
             if [ "$d" != "STANDALONE_CONF/" ]; then
               devices+=("${d%/}")
             fi
           done
+
+          # 处理 STANDALONE_CONF 目录（如果存在）
           if [ -d "STANDALONE_CONF" ]; then
             cd STANDALONE_CONF
             for d in */; do
               devices+=("${d%/}")
             done
-            cd ../..
+            cd ..  # 返回到 configs 目录
           fi
+
+          # 返回到根目录
+          cd "$ROOT_DIR"
+
+          # 将 devices 数组转换为 JSON
           devices_json=$(printf '%s\n' "${devices[@]}" | jq -R . | jq -s .)
-          # 生成矩阵，确保单行输出
-          matrix_json=$(jq -c -n --argjson configs "$(cat toolchain-config.json)" --argjson devices "$devices_json" '
+
+          # 生成矩阵 JSON
+          matrix_json=$(jq -c -n --argjson configs "$(cat "$ROOT_DIR/toolchain-config.json")" --argjson devices "$devices_json" '
             $configs | map(. as $c | $devices | map({
               repository: $c.openwrt_source,
               branch: $c.openwrt_source_branch,
@@ -51,10 +66,11 @@ jobs:
               device: .
             })) | add | { include: . }
           ')
+
           # 调试输出
           echo "matrix_json starts with: ${matrix_json:0:10}"
           echo "matrix=$matrix_json" >> $GITHUB_OUTPUT
-          echo $matrix_json
+          echo "$matrix_json"
 
   build-toolchain:
     needs: generate-matrices
