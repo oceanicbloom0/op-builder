@@ -2,7 +2,7 @@ name: Build Toolchain Daily
 
 on:
   schedule:
-    - cron: "0 0 * * *" # 每天凌晨运行
+    - cron: "0 15 23 * * ?"
   workflow_dispatch:
 
 jobs:
