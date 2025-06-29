@@ -13,7 +13,6 @@ jobs:
     strategy:
       fail-fast: false
     env:
-      CURRENT_BRANCH: ${{  github.event.client_payload.variables.CURRENT_BRANCH }}
       DEVICE: ${{ github.event.client_payload.variables.DEVICE}}
       SOURCE_BRANCH: ${{github.event.client_payload.variables.SOURCE_BRANCH}}
       TOOLCHAIN_TAG: ${{github.event.client_payload.variables.TOOLCHAIN_TAG}}
@@ -271,9 +270,9 @@ jobs:
           cd $OPENWRT_PATH
 
           echo "DATE=$(date +'%Y.%m.%d')" >> $GITHUB_ENV
-          echo "release_tag=${{ env.CURRENT_BRANCH }}-$(date +'%Y.%m.%d')-download" >> $GITHUB_ENV
+          echo "release_tag=${{ github.ref_name }}-$(date +'%Y.%m.%d')-download" >> $GITHUB_ENV
           # echo "DEVICES=$(echo '${{ needs.generate-matrix.outputs.matrix }}' | jq -r '.include[].device' | tr '\n' ' ')" >> $GITHUB_ENV
-          echo "BIN_PATH=openwrt/${{ env.DEVICE }}/${{ env.CURRENT_BRANCH }}" >> $GITHUB_ENV
+          echo "BIN_PATH=openwrt/${{ env.DEVICE }}/${{ github.ref_name }}" >> $GITHUB_ENV
 
           # Calculate and Save Duration
           end_time=$(date +%s)
