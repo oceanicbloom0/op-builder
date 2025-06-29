@@ -13,9 +13,7 @@ jobs:
     strategy:
       fail-fast: false
     env:
-      OPENWRT_PATH: ${{  github.event.client_payload.variables.OPENWRT_PATH }}
       CURRENT_BRANCH: ${{  github.event.client_payload.variables.CURRENT_BRANCH }}
-      SOURCE_REPO: ${{  github.event.client_payload.variables.SOURCE_REPO }}
       DEVICE: ${{ github.event.client_payload.variables.DEVICE}}
       SOURCE_BRANCH: ${{github.event.client_payload.variables.SOURCE_BRANCH}}
       TOOLCHAIN_TAG: ${{github.event.client_payload.variables.TOOLCHAIN_TAG}}
@@ -122,6 +120,8 @@ jobs:
 
       - name: Mount toolchain
         run: |
+          # Set SOURCE_REPO
+          export SOURCE_REPO="$(basename ${{ env.SOURCE_URL }} .git)"
 
           for i in {0..9}
           do
@@ -132,8 +132,9 @@ jobs:
           sudo mount -o loop toolchain-$SOURCE_REPO-$SOURCE_BRANCH-${{ env.DEVICE }}.img openwrt-ro
           sudo mount -t overlay overlay -o lowerdir=openwrt-ro,upperdir=overlay,workdir=workdir openwrt
           echo $GITHUB_WORKSPACE
-          echo $OPENWRT_PATH
-          cd $OPENWRT_PATH
+
+          # Set OPENWRT_PATH in GITHUB_ENV
+          cd openwrt && echo "OPENWRT_PATH=$PWD" >> $GITHUB_ENV
           git pull
 
       - name: Add packages
