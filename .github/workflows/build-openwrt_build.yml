@@ -268,16 +268,20 @@ jobs:
           seconds=$((duration % 60))
           echo "build_duration=${minutes} minutes and ${seconds} seconds" >> $GITHUB_ENV
 
-          # Example
-          echo "The build took ${{ env.build_duration }}."
+      - name: Generate release-text
+        run: |
+          cat <<EOF >> release-text
+          > ### Build Info (Last Build)
+          > The build took ${build_duration}.
+          EOF
 
       - name: Upload firmware to release
         uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: ${{ env.FIRMWARE_NAME }}
-          tag_name: ${{ env.RELEASE_TAG }}
+          name: "${{ env.FIRMWARE_NAME }} | ${{ env.DEVICE }}"
+          tag_name: "${{ env.RELEASE_TAG }}-${{ env.DEVICE }}"
           body_path: ${{ github.workspace }}/release-text
           files: ${{ env.PACKAGED_OUTPUTPATH }}/*
 
