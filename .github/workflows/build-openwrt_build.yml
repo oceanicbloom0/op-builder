@@ -103,7 +103,7 @@ jobs:
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
-          sudo timedatectl set-timezone "Asia/Shanghai"
+          sudo timedatectl set-timezone "Asia/Taipei"
 
           ulimit -u 10000 && ulimit -n 4096 && ulimit -d unlimited && ulimit -m unlimited && ulimit -s unlimited && ulimit -t unlimited && ulimit -v unlimited
 
