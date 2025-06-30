@@ -182,6 +182,13 @@ jobs:
         run: |
           /bin/bash $GITHUB_WORKSPACE/scripts/ssh.sh ${{ github.repository_owner }} > /dev/null 2>&1
 
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: config-${{ env.DEVICE }}
+          path: ${{ env.OPENWRT_PATH }}/.config
+
       - name: Defconfig
         if: always()
         run: |
