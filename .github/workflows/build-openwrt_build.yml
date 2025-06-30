@@ -200,7 +200,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: config-${{ env.DEVICE }}
+          name: defconfig-${{ env.DEVICE }}
           path: ${{ env.OPENWRT_PATH }}/defconfig
 
       - name: Compile Packages
