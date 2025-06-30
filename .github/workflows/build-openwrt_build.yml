@@ -2,7 +2,7 @@ name: Build OpenWrt => Build
 
 on:
   repository_dispatch:
-    types: [trigger-build-openwrt_build]
+    types: [trigger-build-openwrt]
 
 jobs:
   build:
@@ -22,6 +22,7 @@ jobs:
       SOURCE_URL: ${{github.event.client_payload.variables.SOURCE_URL}}
       running_ssh_device: ${{ github.event.client_payload.variables.running_ssh_device }}
       FIRMWARE_NAME: ${{ github.event.client_payload.variables.FIRMWARE_NAME }}
+      RELEASE_TAG: ${{ github.event.client_payload.variables.RELEASE_TAG }}
 
     steps:
       - name: Record Start Time
@@ -32,7 +33,7 @@ jobs:
       #   uses: peter-evans/repository-dispatch@v3
       #   if: ${{ env.RUNNER_PASS == 'false' }}
       #   with:
-      #     event-type: trigger-build-openwrt_build
+      #     event-type: trigger-build-openwrt
       #     token: ${{ secrets.GITHUB_TOKEN }}
       #     client-payload: |-
       #       {
@@ -256,7 +257,7 @@ jobs:
           cd $OPENWRT_PATH
 
           echo "DATE=$(date +'%Y.%m.%d')" >> $GITHUB_ENV
-          echo "release_tag=${{ github.ref_name }}-$(date +'%Y.%m.%d')-download" >> $GITHUB_ENV
+          # echo "release_tag=${{ github.ref_name }}-$(date +'%Y.%m.%d')-download" >> $GITHUB_ENV
           # echo "DEVICES=$(echo '${{ needs.generate-matrix.outputs.matrix }}' | jq -r '.include[].device' | tr '\n' ' ')" >> $GITHUB_ENV
           echo "BIN_PATH=openwrt/${{ env.DEVICE }}/${{ github.ref_name }}" >> $GITHUB_ENV
 
@@ -276,7 +277,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           name: ${{ env.FIRMWARE_NAME }}
-          tag_name: bins
+          tag_name: ${{ env.RELEASE_TAG }}
           body_path: ${{ github.workspace }}/release-text
           files: ${{ env.PACKAGED_OUTPUTPATH }}/*
 

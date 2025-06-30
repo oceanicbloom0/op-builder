@@ -18,15 +18,19 @@ on:
       trigger-build-event-type:
         description: "Trigger build event type name"
         required: true
-        default: "trigger-build-openwrt_build"
+        default: "trigger-build-openwrt"
       TOOLCHAIN_TAG:
         description: "Release tag used to store or retrieve the toolchain"
         required: true
         default: "Toolchain"
       FIRMWARE_NAME:
-        description: ""
+        description: "Name of the firmware to be built and released"
         required: true
-        default: "DokiDoki"
+        default: "OpenWrt"
+      RELEASE_TAG:
+        description: "Name of the release tag for the firmware"
+        required: true
+        default: "bins"
       ssh:
         description: "Enable SSH"
         required: true
