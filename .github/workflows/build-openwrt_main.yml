@@ -112,6 +112,7 @@ jobs:
                 "only_ssh": "${{ inputs.only_ssh }}",
                 "SOURCE_URL": "${{ env.SOURCE_URL }}",
                 "running_ssh_device": "${{ inputs.running_ssh_device }}",
-                "FIRMWARE_NAME": "${{ inputs.FIRMWARE_NAME }}"
+                "FIRMWARE_NAME": "${{ inputs.FIRMWARE_NAME }}",
+                "RELEASE_TAG": "${{ inputs.RELEASE_TAG }}"
               }
             }
