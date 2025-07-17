@@ -9,6 +9,3 @@ for file in openwrt*; do
     newname="[${REPO_CLEANED}] ${DATE} ${FIRMWARE_NAME}${file#openwrt}"
     mv -- "$file" "$newname"
 done
-
-# 查看结果
-ls
