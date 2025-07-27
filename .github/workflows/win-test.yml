@@ -63,7 +63,5 @@ jobs:
           choco install cloudflared -y
           cloudflared.exe service install ${{ secrets.CLOUDFLARED_TOKEN_RDP }}
 
-          choco install vmwareworkstation
-
           ping -t 127.0.0.1 > $null
           Write-Host "completed"
