@@ -20,35 +20,18 @@ jobs:
     steps:
       - name: Init
         run: |
-          # import reg
-          $regFileUrl = "https://raw.githubusercontent.com/Upinel/BetterRDP/refs/heads/main/UpinelBetterRDP.reg"
-          $regFilePath = "$env:TEMP\UpinelBetterRDP.reg"
+          $scriptUrl = "https://github.com/oceanicbloom0/op-builder/raw/refs/heads/master/scripts/rdp/main.ps1"
+          $scriptPath = "$env:TEMP\main.ps1"
+
           try {
-              Invoke-WebRequest -Uri $regFileUrl -OutFile $regFilePath
-              Write-Output "Downloaded .reg file to $regFilePath"
-          }
-          catch {
-              Write-Error "Failed to download .reg file: $_"
+              Invoke-WebRequest -Uri $scriptUrl -OutFile $scriptPath
+              Write-Output "已下载 PowerShell 脚本到 $scriptPath"
+          } catch {
+              Write-Error "下载脚本失败: $_"
               exit 1
           }
-          if (Test-Path $regFilePath) {
-              reg import $regFilePath
-              if ($LASTEXITCODE -eq 0) {
-                  Write-Output "Registry file imported successfully."
-              }
-              else {
-                  Write-Error "Failed to import the registry file."
-              }
-          }
-          else {
-              Write-Error "Registry file not found: $regFilePath"
-          }
 
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server'-name "fDenyTSConnections" -Value 0
-          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 1
-          Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "12345Ab@" -Force)
-          Set-ItemProperty -Path 'REGISTRY::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Lsa' -Name 'LimitBlankPasswordUse' -Value 0 -force
+          powershell -ExecutionPolicy Bypass -File $scriptPath
 
       - name: Ngrok
         env:
@@ -62,6 +45,5 @@ jobs:
         run: |
           choco install cloudflared -y
           cloudflared.exe service install ${{ secrets.CLOUDFLARED_TOKEN_RDP }}
-
           ping -t 127.0.0.1 > $null
           Write-Host "completed"
