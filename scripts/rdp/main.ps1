@@ -3,12 +3,10 @@ $regFileUrl = "https://raw.githubusercontent.com/Upinel/BetterRDP/main/UpinelBet
 $regFilePath = "$env:TEMP\UpinelBetterRDP.reg"
 Invoke-WebRequest -Uri $regFileUrl -OutFile $regFilePath
 
-# Download and install CentBrowser
+# Download CentBrowser
 $chromeInstallerUrl = "https://static.centbrowser.cn/win_beta/5.2.1168.57/centbrowser_5.2.1168.57_x64.exe"
-$installerPath = "$env:TEMP\chrome_installer.exe"
-Invoke-WebRequest -Uri $chromeInstallerUrl -OutFile $installerPath -UseBasicParsing
-Start-Process -FilePath $installerPath -ArgumentList "/silent /install"
-Remove-Item -Path $installerPath -Force
+$installerPath = [System.IO.Path]::Combine([Environment]::GetFolderPath("Desktop"), "chrome_installer.exe")
+Invoke-WebRequest -Uri $chromeInstallerUrl -OutFile $installerPath
 
 
 # Import registry
