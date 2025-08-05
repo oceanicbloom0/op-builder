@@ -10,7 +10,7 @@ on:
 
 jobs:
   b:
-    runs-on: windows-2025
+    runs-on: windows-11-arm
 
     env:
       REPO_URL: https://github.com/coolsnowwolf/lede
