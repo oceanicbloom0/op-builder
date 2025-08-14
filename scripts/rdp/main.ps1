@@ -4,12 +4,6 @@ $regFilePath = "$env:TEMP\UpinelBetterRDP.reg"
 Invoke-WebRequest -Uri $regFileUrl -OutFile $regFilePath
 
 
-$msiUrl = "https://downloads.cloudflareclient.com/v1/download/windows/ga"
-$msiPath = "$env:TEMP\cloudflarewarp.msi"
-Invoke-WebRequest -Uri $msiUrl -OutFile $msiPath
-Start-Process msiexec.exe -ArgumentList "/i `"$msiPath`" /quiet /norestart" -Wait
-Remove-Item $msiPath -Force
-
 # Download CentBrowser
 $chromeInstallerUrl = "https://static.centbrowser.com/win_stable/5.2.1168.74/centbrowser_5.2.1168.74_x64_portable.exe"
 $installerPath = [System.IO.Path]::Combine([Environment]::GetFolderPath("Desktop"), "centbrowser_installer.exe")
