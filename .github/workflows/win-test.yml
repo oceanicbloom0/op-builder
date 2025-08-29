@@ -10,7 +10,7 @@ on:
 
 jobs:
   b:
-    runs-on: windows-2025
+    runs-on: windows-latest
 
     env:
       REPO_URL: https://github.com/coolsnowwolf/lede
@@ -23,14 +23,7 @@ jobs:
           $scriptUrl = "https://github.com/oceanicbloom0/op-builder/raw/refs/heads/master/scripts/rdp/main.ps1"
           $scriptPath = "$env:TEMP\main.ps1"
 
-          try {
-              Invoke-WebRequest -Uri $scriptUrl -OutFile $scriptPath
-              Write-Output "已下载 PowerShell 脚本到 $scriptPath"
-          } catch {
-              Write-Error "下载脚本失败: $_"
-              exit 1
-          }
-
+          Invoke-WebRequest -Uri $scriptUrl -OutFile $scriptPath
           powershell -ExecutionPolicy Bypass -File $scriptPath
 
       - name: Ngrok
