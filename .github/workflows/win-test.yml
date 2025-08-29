@@ -30,13 +30,11 @@ jobs:
           powershell -ExecutionPolicy Bypass -File $scriptPath
 
       - name: Restore CentBrowser cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         continue-on-error: true
         with:
           path: C:\Users\runneradmin\Desktop\centbrowser\User Data
           key: centbrowser-userdata
-          restore-keys: |
-            centbrowser-userdata-
 
       - name: Ngrok
         env:
@@ -53,22 +51,10 @@ jobs:
           ping -t 127.0.0.1 > $null
           Write-Host "completed"
 
-      - name: Check if User Data exists
-        if: always()
-        run: |
-          $userDataPath = "C:\Users\runneradmin\Desktop\centbrowser\User Data"
-          if (Test-Path $userDataPath) {
-            Write-Output "User Data directory exists"
-            Get-ChildItem $userDataPath | ForEach-Object { Write-Output "Found: $($_.Name)" }
-          } else {
-            Write-Output "User Data directory does not exist"
-          }
-
       - name: Save CentBrowser cache
         if: always()
-        uses: actions/cache@v3
+        uses: actions/cache@v4
+        continue-on-error: true
         with:
           path: C:\Users\runneradmin\Desktop\centbrowser\User Data
-          key: centbrowser-userdata-${{ github.run_id }}
-          restore-keys: |
-            centbrowser-userdata-
+          key: centbrowser-userdata
