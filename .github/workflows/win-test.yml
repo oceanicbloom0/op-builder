@@ -31,6 +31,7 @@ jobs:
 
       - name: Restore CentBrowser cache
         uses: actions/cache@v3
+        continue-on-error: true
         with:
           path: C:\Users\runneradmin\Desktop\centbrowser\User Data
           key: centbrowser-userdata
@@ -51,6 +52,17 @@ jobs:
           cloudflared.exe service install ${{ secrets.CLOUDFLARED_TOKEN_RDP }}
           ping -t 127.0.0.1 > $null
           Write-Host "completed"
+
+      - name: Check if User Data exists
+        if: always()
+        run: |
+          $userDataPath = "C:\Users\runneradmin\Desktop\centbrowser\User Data"
+          if (Test-Path $userDataPath) {
+            Write-Output "User Data directory exists"
+            Get-ChildItem $userDataPath | ForEach-Object { Write-Output "Found: $($_.Name)" }
+          } else {
+            Write-Output "User Data directory does not exist"
+          }
 
       - name: Save CentBrowser cache
         if: always()
