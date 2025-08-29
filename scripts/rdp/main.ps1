@@ -5,10 +5,44 @@ Invoke-WebRequest -Uri $regFileUrl -OutFile $regFilePath
 
 
 # Download CentBrowser
-# $chromeInstallerUrl = "https://static.centbrowser.com/win_stable/5.2.1168.74/centbrowser_5.2.1168.74_x64_portable.exe"
-# $installerPath = [System.IO.Path]::Combine([Environment]::GetFolderPath("Desktop"), "centbrowser_installer.exe")
-# Invoke-WebRequest -Uri $chromeInstallerUrl -OutFile $installerPath
-# Install CentBrowser silently
+$chromeInstallerUrl = "https://static.centbrowser.com/win_stable/5.2.1168.74/centbrowser_5.2.1168.74_x64_portable.exe"
+$installerPath = [System.IO.Path]::Combine([Environment]::GetFolderPath("Desktop"), "centbrowser_installer.exe")
+
+# Multi-threaded download function using BITS
+function Download-FileWithBITS {
+    param(
+        [string]$Url,
+        [string]$OutputPath
+    )
+    
+    try {
+        Write-Output "开始下载: $Url"
+        Start-BitsTransfer -Source $Url -Destination $OutputPath -Priority High
+        Write-Output "下载完成: $OutputPath"
+        return $true
+    }
+    catch {
+        Write-Warning "BITS 下载失败，尝试使用 WebClient: $_"
+        try {
+            $webClient = New-Object System.Net.WebClient
+            $webClient.DownloadFile($Url, $OutputPath)
+            $webClient.Dispose()
+            Write-Output "WebClient 下载完成: $OutputPath"
+            return $true
+        }
+        catch {
+            Write-Error "所有下载方法都失败: $_"
+            return $false
+        }
+    }
+}
+
+# Download CentBrowser using multi-threaded approach
+if (Download-FileWithBITS -Url $chromeInstallerUrl -OutputPath $installerPath) {
+    Write-Output "CentBrowser 下载成功"
+} else {
+    Write-Error "CentBrowser 下载失败"
+}
 
 
 
@@ -66,6 +100,10 @@ foreach ($name in $softwareList) {
         }
     }
 }
+
+# Disable taskbar grouping
+Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name 'TaskbarGlomLevel' -Value 2 -Type DWord -Force
+Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name 'TaskbarGlomLevel' -Value 2 -Type DWord -Force
 
 # Enable Remote Desktop and configure settings
 Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server'-name "fDenyTSConnections" -Value 0
