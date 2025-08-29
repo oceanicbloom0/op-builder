@@ -75,6 +75,13 @@ if (Download-FileWithBITS -Url $chromeInstallerUrl -OutputPath $installerPath) {
         if (Test-Path $extractDir) {
             Remove-Item $installerPath -Force
             Write-Output "安装程序已清理，CentBrowser 已解压到: $extractDir"
+            
+            # Create User Data directory structure for caching
+            $userDataDir = Join-Path $extractDir "User Data"
+            if (-not (Test-Path $userDataDir)) {
+                New-Item -ItemType Directory -Path $userDataDir -Force | Out-Null
+                Write-Output "已创建 User Data 目录用于缓存: $userDataDir"
+            }
         }
         
     }
