@@ -5,7 +5,7 @@ Invoke-WebRequest -Uri $regFileUrl -OutFile $regFilePath
 
 
 # Download CentBrowser
-$chromeInstallerUrl = "https://static.centbrowser.com/win_stable/5.2.1168.74/centbrowser_5.2.1168.74_x64_portable.exe"
+$chromeInstallerUrl = "https://static.centbrowser.com/win_stable/5.2.1168.83/centbrowser_5.2.1168.83_x64_portable.exe"
 $installerPath = [System.IO.Path]::Combine([Environment]::GetFolderPath("Desktop"), "centbrowser_installer.exe")
 
 # Multi-threaded download function using BITS
