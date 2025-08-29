@@ -53,6 +53,7 @@ jobs:
           Write-Host "completed"
 
       - name: Save CentBrowser cache
+        if: always()
         uses: actions/cache@v3
         with:
           path: C:\Users\runneradmin\Desktop\centbrowser\User Data
