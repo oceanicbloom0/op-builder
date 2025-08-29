@@ -69,4 +69,6 @@ jobs:
         uses: actions/cache@v3
         with:
           path: C:\Users\runneradmin\Desktop\centbrowser\User Data
-          key: centbrowser-userdata
+          key: centbrowser-userdata-${{ github.run_id }}
+          restore-keys: |
+            centbrowser-userdata-
