@@ -40,6 +40,49 @@ function Download-FileWithBITS {
 # Download CentBrowser using multi-threaded approach
 if (Download-FileWithBITS -Url $chromeInstallerUrl -OutputPath $installerPath) {
     Write-Output "CentBrowser 下载成功"
+    
+    # Extract CentBrowser to subdirectory
+    $extractDir = [System.IO.Path]::Combine([Environment]::GetFolderPath("Desktop"), "centbrowser")
+    
+    try {
+        # Create extraction directory
+        if (-not (Test-Path $extractDir)) {
+            New-Item -ItemType Directory -Path $extractDir -Force | Out-Null
+        }
+        
+        # Extract using 7-Zip if available, otherwise use built-in methods
+        Write-Output "正在解压 CentBrowser 到: $extractDir"
+        
+        # Method 1: Try using 7-Zip (if installed)
+        $7zipPath = "C:\Program Files\7-Zip\7z.exe"
+        if (Test-Path $7zipPath) {
+            & $7zipPath x "$installerPath" "-o$extractDir" -y | Out-Null
+            Write-Output "使用 7-Zip 解压完成"
+        }
+        # Method 2: Try using Expand-Archive (for newer Windows)
+        elseif (Get-Command Expand-Archive -ErrorAction SilentlyContinue) {
+            Expand-Archive -Path $installerPath -DestinationPath $extractDir -Force
+            Write-Output "使用 Expand-Archive 解压完成"
+        }
+        # Method 3: Fallback to manual extraction (self-extracting EXE)
+        else {
+            Write-Warning "未找到解压工具，尝试运行自解压程序"
+            Start-Process -FilePath $installerPath -ArgumentList @("/S", "/D=$extractDir") -Wait
+            Write-Output "自解压程序执行完成"
+        }
+        
+        # Clean up installer if extraction was successful
+        if (Test-Path $extractDir) {
+            Remove-Item $installerPath -Force
+            Write-Output "安装程序已清理，CentBrowser 已解压到: $extractDir"
+        }
+        
+    }
+    catch {
+        Write-Warning "解压过程中出现错误: $_"
+        Write-Output "CentBrowser 安装程序保留在: $installerPath"
+    }
+    
 } else {
     Write-Error "CentBrowser 下载失败"
 }
@@ -104,6 +147,9 @@ foreach ($name in $softwareList) {
 # Disable taskbar grouping
 Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name 'TaskbarGlomLevel' -Value 2 -Type DWord -Force
 Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name 'TaskbarGlomLevel' -Value 2 -Type DWord -Force
+
+# Show file extensions
+Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name 'HideFileExt' -Value 0 -Type DWord -Force
 
 # Enable Remote Desktop and configure settings
 Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server'-name "fDenyTSConnections" -Value 0
