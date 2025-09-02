@@ -52,7 +52,6 @@ jobs:
         run: |
           # Read the current workflow file
           workflow_file=".github/workflows/build-openwrt_main.yml"
-          content=$(cat "$workflow_file")
           
           # Get available devices from previous step
           devices_str="${{ steps.get-devices.outputs.available_devices }}"
@@ -61,18 +60,30 @@ jobs:
           # Generate YAML options for the devices
           options_yaml=""
           for device in "${devices_array[@]}"; do
-            options_yaml="$options_yaml          - $device\n"
+            options_yaml="$options_yaml        - $device\n"
           done
+          echo "Generated options:\n$options_yaml"
           
-          # Replace the options section in the workflow file
-          # First remove existing options
-          content=$(echo "$content" | sed '/^          options:/,/^          [^[:space:]]/ { /^          options:/p; /^          [^[:space:]]/!d; }')
+          # Use a simple and reliable method to update the options
+          # Create a temporary file with the updated content
+          awk -v new_options="$options_yaml" '
+          /^        options:/ {
+            print
+            print new_options
+            # Skip the existing options lines
+            while (getline > 0) {
+              if (/^        [^[:space:]]/ && !/^          -/) {
+                print
+                break
+              }
+            }
+            next
+          }
+          { print }
+          ' "$workflow_file" > "${workflow_file}.tmp"
           
-          # Add new options
-          content=$(echo "$content" | sed "/^          options:/a\$options_yaml")
-          
-          # Write the updated content back to the file
-          echo "$content" > "$workflow_file"
+          # Replace the original file
+          mv "${workflow_file}.tmp" "$workflow_file"
           
           echo "Updated workflow file with devices: $devices_str"
 
