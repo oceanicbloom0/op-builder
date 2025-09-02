@@ -15,16 +15,27 @@ jobs:
     env:
       DEVICE: ${{ github.event.client_payload.variables.DEVICE}}
       SOURCE_BRANCH: ${{github.event.client_payload.variables.SOURCE_BRANCH}}
-      TOOLCHAIN_TAG: ${{github.event.client_payload.variables.TOOLCHAIN_TAG}}
       APP_CONFIG: ${{github.event.client_payload.variables.APP_CONFIG}}
       ssh: ${{github.event.client_payload.variables.ssh}}
       only_ssh: ${{github.event.client_payload.variables.only_ssh}}
       SOURCE_URL: ${{github.event.client_payload.variables.SOURCE_URL}}
       running_ssh_device: ${{ github.event.client_payload.variables.running_ssh_device }}
-      FIRMWARE_NAME: ${{ github.event.client_payload.variables.FIRMWARE_NAME }}
-      RELEASE_TAG: ${{ github.event.client_payload.variables.RELEASE_TAG }}
 
     steps:
+      - name: Load environment config
+        id: load-env
+        run: |
+          if [ ! -f ".env.config" ]; then
+            echo "Error: .env.config file not found - this file is required"
+            exit 1
+          fi
+          while IFS='=' read -r key value; do
+            if [[ ! "$key" =~ ^# && -n "$key" ]]; then
+              echo "$key=$value" >> $GITHUB_ENV
+              echo "Loaded $key=$value"
+            fi
+          done < ".env.config"
+
       - name: Record Start Time
         id: start
         run: echo "time=$(date +%s)" >> $GITHUB_ENV
