@@ -19,10 +19,6 @@ on:
         description: "Trigger build event type name"
         required: true
         default: "trigger-build-openwrt"
-      TOOLCHAIN_TAG:
-        description: "Release tag used to store or retrieve the toolchain"
-        required: true
-        default: "Toolchain"
       FIRMWARE_NAME:
         description: "Name of the firmware to be built and released"
         required: true
@@ -43,13 +39,19 @@ on:
         description: "Name of the device where SSH is running"
         required: true
         default: "x86-64"
+      devices_to_build:
+        description: "Select devices to build (select none to build all)"
+        required: false
+        type: choice
+        default: "all"
+        options:
+          - all
   repository_dispatch:
     types: [trigger-build-openwrt_main]
 
 env:
   SOURCE_URL: ${{ inputs.openwrt_source }}
   SOURCE_BRANCH: ${{ inputs.openwrt_source_branch }}
-  TOOLCHAIN_TAG: ${{ inputs.TOOLCHAIN_TAG }}
   APP_CONFIG: ${{ inputs.app_config_path }}
 
 jobs:
@@ -65,21 +67,41 @@ jobs:
         run: |
           cd configs
           matrix="{\"include\":["
-          for d in */ ; do
-              if [ "$d" = "STANDALONE_CONF/" ]; then
-                  continue
-              fi
-              device_name=${d%/}
-              matrix="$matrix{\"device\":\"$device_name\"},"
-          done
-          if [ -d "STANDALONE_CONF" ]; then
-              cd STANDALONE_CONF
-              for d in */ ; do
-                  device_name=${d%/}
-                  matrix="$matrix{\"device\":\"$device_name\"},"
-              done
-              cd ..
+          
+          # Get selected device from input
+          selected_device="${{ inputs.devices_to_build }}"
+          
+          # If "all" is selected or no specific device, build all
+          if [ "$selected_device" = "all" ] || [ -z "$selected_device" ]; then
+            for d in */ ; do
+                if [ "$d" = "STANDALONE_CONF/" ]; then
+                    continue
+                fi
+                device_name=${d%/}
+                matrix="$matrix{\"device\":\"$device_name\"},"
+            done
+            if [ -d "STANDALONE_CONF" ]; then
+                cd STANDALONE_CONF
+                for d in */ ; do
+                    device_name=${d%/}
+                    matrix="$matrix{\"device\":\"$device_name\"},"
+                done
+                cd ..
+            fi
+          else
+            # Build only the selected device
+            # Check if device exists in main configs
+            if [ -d "$selected_device" ]; then
+              matrix="$matrix{\"device\":\"$selected_device\"},"
+            # Check if device exists in STANDALONE_CONF
+            elif [ -d "STANDALONE_CONF/$selected_device" ]; then
+              matrix="$matrix{\"device\":\"$selected_device\"},"
+            else
+              echo "Error: Device '$selected_device' not found in configs directory"
+              exit 1
+            fi
           fi
+          
           matrix=${matrix%,}
           matrix="$matrix]}"
           cd ..
@@ -106,7 +128,6 @@ jobs:
               "variables": {
                 "DEVICE": "${{ matrix.device }}",
                 "SOURCE_BRANCH": "${{ env.SOURCE_BRANCH }}",
-                "TOOLCHAIN_TAG": "${{ env.TOOLCHAIN_TAG }}",
                 "APP_CONFIG": "${{ env.APP_CONFIG }}",
                 "ssh": "${{ inputs.ssh }}",
                 "only_ssh": "${{ inputs.only_ssh }}",
