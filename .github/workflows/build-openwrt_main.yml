@@ -19,10 +19,6 @@ on:
         description: "Trigger build event type name"
         required: true
         default: "trigger-build-openwrt"
-      TOOLCHAIN_TAG:
-        description: "Release tag used to store or retrieve the toolchain"
-        required: true
-        default: "Toolchain"
       FIRMWARE_NAME:
         description: "Name of the firmware to be built and released"
         required: true
@@ -56,7 +52,6 @@ on:
 env:
   SOURCE_URL: ${{ inputs.openwrt_source }}
   SOURCE_BRANCH: ${{ inputs.openwrt_source_branch }}
-  TOOLCHAIN_TAG: ${{ inputs.TOOLCHAIN_TAG }}
   APP_CONFIG: ${{ inputs.app_config_path }}
 
 jobs:
@@ -133,7 +128,6 @@ jobs:
               "variables": {
                 "DEVICE": "${{ matrix.device }}",
                 "SOURCE_BRANCH": "${{ env.SOURCE_BRANCH }}",
-                "TOOLCHAIN_TAG": "${{ env.TOOLCHAIN_TAG }}",
                 "APP_CONFIG": "${{ env.APP_CONFIG }}",
                 "ssh": "${{ inputs.ssh }}",
                 "only_ssh": "${{ inputs.only_ssh }}",
