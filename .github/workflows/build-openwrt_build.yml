@@ -15,7 +15,6 @@ jobs:
     env:
       DEVICE: ${{ github.event.client_payload.variables.DEVICE}}
       SOURCE_BRANCH: ${{github.event.client_payload.variables.SOURCE_BRANCH}}
-      TOOLCHAIN_TAG: ${{github.event.client_payload.variables.TOOLCHAIN_TAG}}
       APP_CONFIG: ${{github.event.client_payload.variables.APP_CONFIG}}
       ssh: ${{github.event.client_payload.variables.ssh}}
       only_ssh: ${{github.event.client_payload.variables.only_ssh}}
@@ -126,7 +125,7 @@ jobs:
           for i in {0..9}
           do
             echo downloading..
-            curl -fsL -k https://github.com/$GITHUB_REPOSITORY/releases/download/$TOOLCHAIN_TAG/toolchain-$SOURCE_REPO-$SOURCE_BRANCH-${{ env.DEVICE }}.img.0$i >> toolchain-$SOURCE_REPO-$SOURCE_BRANCH-${{ env.DEVICE }}.img || break
+            curl -fsL -k https://github.com/$GITHUB_REPOSITORY/releases/download/Toolchain/toolchain-$SOURCE_REPO-$SOURCE_BRANCH-${{ env.DEVICE }}.img.0$i >> toolchain-$SOURCE_REPO-$SOURCE_BRANCH-${{ env.DEVICE }}.img || break
           done
           mkdir -p openwrt-ro openwrt workdir overlay
           sudo mount -o loop toolchain-$SOURCE_REPO-$SOURCE_BRANCH-${{ env.DEVICE }}.img openwrt-ro
