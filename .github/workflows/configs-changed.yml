@@ -1,0 +1,93 @@
+name: Configs Changed Check
+
+on:
+  push:
+    paths:
+      - 'configs/**'
+  pull_request:
+    paths:
+      - 'configs/**'
+  workflow_dispatch:
+
+jobs:
+  update-device-options:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get all available devices
+        id: get-devices
+        run: |
+          cd configs
+          devices=("all")
+          
+          # Get devices from main configs directory
+          for d in */ ; do
+            if [ "$d" = "STANDALONE_CONF/" ]; then
+              continue
+            fi
+            device_name=${d%/}
+            devices+=("$device_name")
+          done
+          
+          # Get devices from STANDALONE_CONF directory
+          if [ -d "STANDALONE_CONF" ]; then
+            cd STANDALONE_CONF
+            for d in */ ; do
+              device_name=${d%/}
+              devices+=("$device_name")
+            done
+            cd ..
+          fi
+          
+          # Convert array to comma-separated string for output
+          devices_str=$(IFS=,; echo "${devices[*]}")
+          echo "available_devices=$devices_str" >> $GITHUB_OUTPUT
+          echo "Available devices: $devices_str"
+
+      - name: Update main workflow with device options
+        run: |
+          # Read the current workflow file
+          workflow_file=".github/workflows/build-openwrt_main.yml"
+          content=$(cat "$workflow_file")
+          
+          # Get available devices from previous step
+          devices_str="${{ steps.get-devices.outputs.available_devices }}"
+          IFS=',' read -ra devices_array <<< "$devices_str"
+          
+          # Generate YAML options for the devices
+          options_yaml=""
+          for device in "${devices_array[@]}"; do
+            options_yaml="$options_yaml          - $device\n"
+          done
+          
+          # Replace the options section in the workflow file
+          # First remove existing options
+          content=$(echo "$content" | sed '/^          options:/,/^          [^[:space:]]/ { /^          options:/p; /^          [^[:space:]]/!d; }')
+          
+          # Add new options
+          content=$(echo "$content" | sed "/^          options:/a\$options_yaml")
+          
+          # Write the updated content back to the file
+          echo "$content" > "$workflow_file"
+          
+          echo "Updated workflow file with devices: $devices_str"
+
+      - name: Commit and push changes if needed
+        run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            git config --local user.email "action@github.com"
+            git config --local user.name "GitHub Action"
+            
+            git add .github/workflows/build-openwrt_main.yml
+            
+            if git diff --staged --quiet; then
+              echo "No changes to commit"
+            else
+              git commit -m "chore: update device options in workflow"
+              git push
+            fi
+          fi
