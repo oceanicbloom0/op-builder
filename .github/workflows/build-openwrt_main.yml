@@ -50,8 +50,8 @@ jobs:
       - name: Load environment config
         id: load-env
         run: |
-          if [ ! -f ".env.config" ]; then
-            echo "Error: .env.config file not found - this file is required"
+          if [ ! -f "env.config" ]; then
+            echo "Error: env.config file not found - this file is required"
             exit 1
           fi
           while IFS='=' read -r key value; do
@@ -59,7 +59,7 @@ jobs:
               echo "$key=$value" >> $GITHUB_ENV
               echo "Loaded $key=$value"
             fi
-          done < ".env.config"
+          done < "env.config"
 
       - id: set-matrix
         run: |
