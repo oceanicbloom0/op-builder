@@ -82,6 +82,14 @@ jobs:
 
           # 这里挂载会影响到$GITHUB_WORKSPACE，不要在后续步骤挂载，最好在编译步骤开启就运行~
 
+      - name: Checkout
+        run: |
+          cd $GITHUB_WORKSPACE
+          git init
+          git remote add origin https://github.com/$GITHUB_REPOSITORY
+          git fetch
+          git checkout -t origin/${{ github.ref_name }}
+
       - name: Load environment config
         id: load-env
         run: |
@@ -95,14 +103,6 @@ jobs:
               echo "Loaded $key=$value"
             fi
           done < "env.config"
-
-      - name: Checkout
-        run: |
-          cd $GITHUB_WORKSPACE
-          git init
-          git remote add origin https://github.com/$GITHUB_REPOSITORY
-          git fetch
-          git checkout -t origin/${{ github.ref_name }}
 
       - name: SSH
         if: ${{ env.only_ssh == 'true'}}
