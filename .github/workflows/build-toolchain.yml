@@ -34,25 +34,11 @@ jobs:
           # 进入 configs 目录
           cd configs
 
-          # 获取设备列表并提取CPU架构
+          # 获取设备列表
           devices=()
-          arch_map=()
           for d in */; do
             if [ "$d" != "STANDALONE_CONF/" ]; then
               devices+=("${d%/}")
-              # 提取CPU架构信息
-              config_file="$ROOT_DIR/configs/${d%/}/.config"
-              if [ -f "$config_file" ]; then
-                target=$(grep "^CONFIG_TARGET_[^=]*=y" "$config_file" | grep -v "_DEVICE_" | grep -v "_ROOTFS_" | head -1 | sed 's/CONFIG_TARGET_//; s/=y//')
-                subtarget=$(grep "^CONFIG_TARGET_${target}_[^=]*=y" "$config_file" | grep -v "_DEVICE_" | grep -v "_ROOTFS_" | head -1 | sed "s/CONFIG_TARGET_${target}_//; s/=y//")
-                if [ -n "$target" ] && [ -n "$subtarget" ]; then
-                  arch_map+=("${target}_${subtarget}")
-                else
-                  arch_map+=("${d%/}")
-                fi
-              else
-                arch_map+=("${d%/}")
-              fi
             fi
           done
 
@@ -61,19 +47,6 @@ jobs:
             cd STANDALONE_CONF
             for d in */; do
               devices+=("${d%/}")
-              # 提取CPU架构信息
-              config_file="$ROOT_DIR/configs/STANDALONE_CONF/${d%/}/.config"
-              if [ -f "$config_file" ]; then
-                target=$(grep "^CONFIG_TARGET_[^=]*=y" "$config_file" | grep -v "_DEVICE_" | grep -v "_ROOTFS_" | head -1 | sed 's/CONFIG_TARGET_//; s/=y//')
-                subtarget=$(grep "^CONFIG_TARGET_${target}_[^=]*=y" "$config_file" | grep -v "_DEVICE_" | grep -v "_ROOTFS_" | head -1 | sed "s/CONFIG_TARGET_${target}_//; s/=y//")
-                if [ -n "$target" ] && [ -n "$subtarget" ]; then
-                  arch_map+=("${target}_${subtarget}")
-                else
-                  arch_map+=("${d%/}")
-                fi
-              else
-                arch_map+=("${d%/}")
-              fi
             done
             cd ..  # 返回到 configs 目录
           fi
@@ -84,19 +57,13 @@ jobs:
           # 将 devices 数组转换为 JSON
           devices_json=$(printf '%s\n' "${devices[@]}" | jq -R . | jq -s .)
 
-          # 将 arch_map 数组转换为 JSON
-          arch_map_json=$(printf '%s\n' "${arch_map[@]}" | jq -R . | jq -s .)
-
-          # 生成唯一的CPU架构列表
-          unique_archs_json=$(echo "$arch_map_json" | jq 'unique')
-
-          # 生成矩阵 JSON - 基于CPU架构而不是设备名
-          matrix_json=$(jq -c -n --argjson configs "$(cat "$ROOT_DIR/toolchain-config.json")" --argjson archs "$unique_archs_json" '
-            $configs | map(. as $c | $archs | map({
+          # 生成矩阵 JSON
+          matrix_json=$(jq -c -n --argjson configs "$(cat "$ROOT_DIR/toolchain-config.json")" --argjson devices "$devices_json" '
+            $configs | map(. as $c | $devices | map({
               repository: $c.openwrt_source,
               branch: $c.openwrt_source_branch,
               tag: $c.TOOLCHAIN_TAG,
-              arch: .
+              device: .
             })) | add | { include: . }
           ')
 
@@ -115,7 +82,7 @@ jobs:
       contents: write
       actions: write
     env:
-      ARCH: ${{ matrix.arch }}
+      DEVICE: ${{ matrix.device }}
 
     steps:
       - name: Checkout
@@ -144,12 +111,9 @@ jobs:
           export DEVICE_SUBTARGET=$(cat .config | grep CONFIG_TARGET_SUBTARGET | awk -F '"' '{print $2}' || echo "")
           echo "DEVICE_SUBTARGET=$DEVICE_SUBTARGET" >> $GITHUB_ENV
           echo "DEVICE_SUBTARGET=$DEVICE_SUBTARGET" >> $GITHUB_OUTPUT
-          export TOOLCHAIN_IMAGE="toolchain-$SOURCE_REPO-${{ matrix.branch }}-${{ matrix.arch }}"
+          export TOOLCHAIN_IMAGE="toolchain-$SOURCE_REPO-${{ matrix.branch }}-${{ matrix.device }}"
           echo "TOOLCHAIN_IMAGE=$TOOLCHAIN_IMAGE" >> $GITHUB_ENV
           echo "TOOLCHAIN_IMAGE=$TOOLCHAIN_IMAGE" >> $GITHUB_OUTPUT
-          # 解析架构名称以获取target和subtarget
-          export TARGET_ARCH=$(echo "${{ matrix.arch }}" | sed 's/_/ /g')
-          echo "TARGET_ARCH=$TARGET_ARCH" >> $GITHUB_ENV
 
       - name: Compare Toolchain Hash
         id: hash
@@ -185,25 +149,11 @@ jobs:
       - name: Generate Toolchain Configuration
         if: steps.hash.outputs.REBUILD_TOOLCHAIN == 'true'
         run: |
-          # 基于架构生成基本配置
-          cd $OPENWRT_PATH
-          # 解析target和subtarget
-          TARGET=$(echo "$TARGET_ARCH" | cut -d' ' -f1)
-          SUBTARGET=$(echo "$TARGET_ARCH" | cut -d' ' -f2)
-
-          # 生成基本target配置
-          echo "CONFIG_TARGET_$TARGET=y" > .config
-          echo "CONFIG_TARGET_${TARGET}_${SUBTARGET}=y" >> .config
-
-          # 禁用所有具体设备配置，确保是纯toolchain
-          echo "# CONFIG_TARGET_${TARGET}_${SUBTARGET}_DEVICE_* is not set" >> .config
-
-          # 添加toolchain编译所需的通用配置
-          echo "CONFIG_ALL=y" >> .config
-          echo "CONFIG_ALL_NONSHARED=y" >> .config
-          echo "CONFIG_DEVEL=y" >> .config
-          echo "CONFIG_CCACHE=y" >> .config
-
+          bash $GITHUB_WORKSPACE/scripts/openwrt/copy-config.sh
+          cd $OPENWRT_PATH && make defconfig
+          sed -i '/CONFIG_DEFAULT_luci/'d .config
+          echo -e "\nCONFIG_ALL=y" >> $OPENWRT_PATH/.config
+          echo -e "\nCONFIG_ALL_NONSHARED=y" >> $OPENWRT_PATH/.config
           make defconfig > /dev/null 2>&1
 
       - name: Install Feeds

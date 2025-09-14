@@ -20,9 +20,6 @@ jobs:
       only_ssh: ${{github.event.client_payload.variables.only_ssh}}
       SOURCE_URL: ${{github.event.client_payload.variables.SOURCE_URL}}
       running_ssh_device: ${{ github.event.client_payload.variables.running_ssh_device }}
-      TOOLCHAIN_TAG: ${{ github.event.client_payload.variables.TOOLCHAIN_TAG }}
-      FIRMWARE_NAME: ${{ github.event.client_payload.variables.FIRMWARE_NAME }}
-      RELEASE_TAG: ${{ github.event.client_payload.variables.RELEASE_TAG }}
 
     steps:
       - name: Record Start Time
@@ -137,34 +134,13 @@ jobs:
           # Set SOURCE_REPO
           export SOURCE_REPO="$(basename ${{ env.SOURCE_URL }} .git)"
 
-          # Extract CPU architecture from device config
-          if [ -f "$GITHUB_WORKSPACE/configs/${{ env.DEVICE }}/.config" ]; then
-            target=$(grep "^CONFIG_TARGET_[^=]*=y" "$GITHUB_WORKSPACE/configs/${{ env.DEVICE }}/.config" | grep -v "_DEVICE_" | grep -v "_ROOTFS_" | head -1 | sed 's/CONFIG_TARGET_//; s/=y//')
-            subtarget=$(grep "^CONFIG_TARGET_${target}_[^=]*=y" "$GITHUB_WORKSPACE/configs/${{ env.DEVICE }}/.config" | grep -v "_DEVICE_" | grep -v "_ROOTFS_" | head -1 | sed "s/CONFIG_TARGET_${target}_//; s/=y//")
-            if [ -n "$target" ] && [ -n "$subtarget" ]; then
-              export ARCH="${target}_${subtarget}"
-            else
-              export ARCH="${{ env.DEVICE }}"
-            fi
-          elif [ -f "$GITHUB_WORKSPACE/configs/STANDALONE_CONF/${{ env.DEVICE }}/.config" ]; then
-            target=$(grep "^CONFIG_TARGET_[^=]*=y" "$GITHUB_WORKSPACE/configs/STANDALONE_CONF/${{ env.DEVICE }}/.config" | grep -v "_DEVICE_" | grep -v "_ROOTFS_" | head -1 | sed 's/CONFIG_TARGET_//; s/=y//')
-            subtarget=$(grep "^CONFIG_TARGET_${target}_[^=]*=y" "$GITHUB_WORKSPACE/configs/STANDALONE_CONF/${{ env.DEVICE }}/.config" | grep -v "_DEVICE_" | grep -v "_ROOTFS_" | head -1 | sed "s/CONFIG_TARGET_${target}_//; s/=y//")
-            if [ -n "$target" ] && [ -n "$subtarget" ]; then
-              export ARCH="${target}_${subtarget}"
-            else
-              export ARCH="${{ env.DEVICE }}"
-            fi
-          else
-            export ARCH="${{ env.DEVICE }}"
-          fi
-
           for i in {0..9}
           do
             echo downloading..
-            curl -fsL -k https://github.com/$GITHUB_REPOSITORY/releases/download/$TOOLCHAIN_TAG/toolchain-$SOURCE_REPO-$SOURCE_BRANCH-$ARCH.img.0$i >> toolchain-$SOURCE_REPO-$SOURCE_BRANCH-$ARCH.img || break
+            curl -fsL -k https://github.com/$GITHUB_REPOSITORY/releases/download/$TOOLCHAIN_TAG/toolchain-$SOURCE_REPO-$SOURCE_BRANCH-${{ env.DEVICE }}.img.0$i >> toolchain-$SOURCE_REPO-$SOURCE_BRANCH-${{ env.DEVICE }}.img || break
           done
           mkdir -p openwrt-ro openwrt workdir overlay
-          sudo mount -o loop toolchain-$SOURCE_REPO-$SOURCE_BRANCH-$ARCH.img openwrt-ro
+          sudo mount -o loop toolchain-$SOURCE_REPO-$SOURCE_BRANCH-${{ env.DEVICE }}.img openwrt-ro
           sudo mount -t overlay overlay -o lowerdir=openwrt-ro,upperdir=overlay,workdir=workdir openwrt
           echo $GITHUB_WORKSPACE
 
