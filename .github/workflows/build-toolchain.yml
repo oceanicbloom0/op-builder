@@ -34,19 +34,42 @@ jobs:
           # 进入 configs 目录
           cd configs
 
-          # 获取设备列表
-          devices=()
-          for d in */; do
-            if [ "$d" != "STANDALONE_CONF/" ]; then
-              devices+=("${d%/}")
+          # 获取所有设备的架构信息
+          declare -A arch_map
+          arch_list=()
+
+          # 处理主配置目录
+          for device_dir in */; do
+            if [ "$device_dir" != "STANDALONE_CONF/" ] && [ -f "$device_dir/.config" ]; then
+              device="${device_dir%/}"
+              # 提取架构信息
+              target=$(grep "^CONFIG_TARGET_[^=]*=y" "$device_dir/.config" | grep -v "_DEVICE_" | grep -v "_ROOTFS_" | head -1 | sed 's/CONFIG_TARGET_//; s/=y//')
+              if [ -n "$target" ]; then
+                subtarget=$(grep "^CONFIG_TARGET_${target}_[^=]*=y" "$device_dir/.config" | grep -v "_DEVICE_" | grep -v "_ROOTFS_" | head -1 | sed "s/CONFIG_TARGET_${target}_//; s/=y//")
+                arch="${target}_${subtarget}"
+                arch_map["$arch"]="$device"  # 存储第一个设备作为代表
+                arch_list+=("$arch")
+              fi
             fi
           done
 
           # 处理 STANDALONE_CONF 目录（如果存在）
           if [ -d "STANDALONE_CONF" ]; then
             cd STANDALONE_CONF
-            for d in */; do
-              devices+=("${d%/}")
+            for device_dir in */; do
+              if [ -f "$device_dir/.config" ]; then
+                device="${device_dir%/}"
+                # 提取架构信息
+                target=$(grep "^CONFIG_TARGET_[^=]*=y" "$device_dir/.config" | grep -v "_DEVICE_" | grep -v "_ROOTFS_" | head -1 | sed 's/CONFIG_TARGET_//; s/=y//')
+                if [ -n "$target" ]; then
+                  subtarget=$(grep "^CONFIG_TARGET_${target}_[^=]*=y" "$device_dir/.config" | grep -v "_DEVICE_" | grep -v "_ROOTFS_" | head -1 | sed "s/CONFIG_TARGET_${target}_//; s/=y//")
+                  arch="${target}_${subtarget}"
+                  if [ -z "${arch_map[$arch]}" ]; then
+                    arch_map["$arch"]="$device"  # 只存储第一个设备作为代表
+                  fi
+                  arch_list+=("$arch")
+                fi
+              fi
             done
             cd ..  # 返回到 configs 目录
           fi
@@ -54,16 +77,19 @@ jobs:
           # 返回到根目录
           cd "$ROOT_DIR"
 
-          # 将 devices 数组转换为 JSON
-          devices_json=$(printf '%s\n' "${devices[@]}" | jq -R . | jq -s .)
+          # 去重架构列表
+          unique_archs=($(printf '%s\n' "${arch_list[@]}" | sort -u))
+
+          # 将架构数组转换为 JSON
+          archs_json=$(printf '%s\n' "${unique_archs[@]}" | jq -R . | jq -s .)
 
           # 生成矩阵 JSON
-          matrix_json=$(jq -c -n --argjson configs "$(cat "$ROOT_DIR/toolchain-config.json")" --argjson devices "$devices_json" '
-            $configs | map(. as $c | $devices | map({
+          matrix_json=$(jq -c -n --argjson configs "$(cat "$ROOT_DIR/toolchain-config.json")" --argjson archs "$archs_json" '
+            $configs | map(. as $c | $archs | map({
               repository: $c.openwrt_source,
               branch: $c.openwrt_source_branch,
               tag: $c.TOOLCHAIN_TAG,
-              device: .
+              arch: .
             })) | add | { include: . }
           ')
 
@@ -82,7 +108,7 @@ jobs:
       contents: write
       actions: write
     env:
-      DEVICE: ${{ matrix.device }}
+      ARCH: ${{ matrix.arch }}
 
     steps:
       - name: Checkout
@@ -111,7 +137,7 @@ jobs:
           export DEVICE_SUBTARGET=$(cat .config | grep CONFIG_TARGET_SUBTARGET | awk -F '"' '{print $2}' || echo "")
           echo "DEVICE_SUBTARGET=$DEVICE_SUBTARGET" >> $GITHUB_ENV
           echo "DEVICE_SUBTARGET=$DEVICE_SUBTARGET" >> $GITHUB_OUTPUT
-          export TOOLCHAIN_IMAGE="toolchain-$SOURCE_REPO-${{ matrix.branch }}-${{ matrix.device }}"
+          export TOOLCHAIN_IMAGE="toolchain-$SOURCE_REPO-${{ matrix.branch }}-${{ matrix.arch }}"
           echo "TOOLCHAIN_IMAGE=$TOOLCHAIN_IMAGE" >> $GITHUB_ENV
           echo "TOOLCHAIN_IMAGE=$TOOLCHAIN_IMAGE" >> $GITHUB_OUTPUT
 
@@ -149,12 +175,8 @@ jobs:
       - name: Generate Toolchain Configuration
         if: steps.hash.outputs.REBUILD_TOOLCHAIN == 'true'
         run: |
-          bash $GITHUB_WORKSPACE/scripts/openwrt/copy-config.sh
-          cd $OPENWRT_PATH && make defconfig
-          sed -i '/CONFIG_DEFAULT_luci/'d .config
-          echo -e "\nCONFIG_ALL=y" >> $OPENWRT_PATH/.config
-          echo -e "\nCONFIG_ALL_NONSHARED=y" >> $OPENWRT_PATH/.config
-          make defconfig > /dev/null 2>&1
+          bash $GITHUB_WORKSPACE/scripts/openwrt/generate-arch-config.sh
+          cd $OPENWRT_PATH && make defconfig > /dev/null 2>&1
 
       - name: Install Feeds
         if: steps.hash.outputs.REBUILD_TOOLCHAIN == 'true'
