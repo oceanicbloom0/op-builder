@@ -46,9 +46,16 @@ jobs:
               target=$(grep "^CONFIG_TARGET_[^=]*=y" "$device_dir/.config" | grep -v "_DEVICE_" | grep -v "_ROOTFS_" | head -1 | sed 's/CONFIG_TARGET_//; s/=y//')
               if [ -n "$target" ]; then
                 subtarget=$(grep "^CONFIG_TARGET_${target}_[^=]*=y" "$device_dir/.config" | grep -v "_DEVICE_" | grep -v "_ROOTFS_" | head -1 | sed "s/CONFIG_TARGET_${target}_//; s/=y//")
-                arch="${target}_${subtarget}"
-                arch_map["$arch"]="$device"  # 存储第一个设备作为代表
-                arch_list+=("$arch")
+                if [ -n "$subtarget" ]; then
+                  arch="${target}_${subtarget}"
+                  arch_map["$arch"]="$device"  # 存储第一个设备作为代表
+                  arch_list+=("$arch")
+                  echo "提取架构: $device -> $arch"
+                else
+                  echo "警告: 无法提取 $device 的子目标架构"
+                fi
+              else
+                echo "警告: 无法提取 $device 的目标架构"
               fi
             fi
           done
@@ -63,11 +70,18 @@ jobs:
                 target=$(grep "^CONFIG_TARGET_[^=]*=y" "$device_dir/.config" | grep -v "_DEVICE_" | grep -v "_ROOTFS_" | head -1 | sed 's/CONFIG_TARGET_//; s/=y//')
                 if [ -n "$target" ]; then
                   subtarget=$(grep "^CONFIG_TARGET_${target}_[^=]*=y" "$device_dir/.config" | grep -v "_DEVICE_" | grep -v "_ROOTFS_" | head -1 | sed "s/CONFIG_TARGET_${target}_//; s/=y//")
-                  arch="${target}_${subtarget}"
-                  if [ -z "${arch_map[$arch]}" ]; then
-                    arch_map["$arch"]="$device"  # 只存储第一个设备作为代表
+                  if [ -n "$subtarget" ]; then
+                    arch="${target}_${subtarget}"
+                    if [ -z "${arch_map[$arch]}" ]; then
+                      arch_map["$arch"]="$device"  # 只存储第一个设备作为代表
+                    fi
+                    arch_list+=("$arch")
+                    echo "提取架构: $device -> $arch"
+                  else
+                    echo "警告: 无法提取 $device 的子目标架构"
                   fi
-                  arch_list+=("$arch")
+                else
+                  echo "警告: 无法提取 $device 的目标架构"
                 fi
               fi
             done
@@ -79,6 +93,12 @@ jobs:
 
           # 去重架构列表
           unique_archs=($(printf '%s\n' "${arch_list[@]}" | sort -u))
+
+          # 检查是否有有效的架构
+          if [ ${#unique_archs[@]} -eq 0 ]; then
+            echo "错误: 没有找到有效的CPU架构"
+            exit 1
+          fi
 
           # 将架构数组转换为 JSON
           archs_json=$(printf '%s\n' "${unique_archs[@]}" | jq -R . | jq -s .)
@@ -93,8 +113,18 @@ jobs:
             })) | add | { include: . }
           ')
 
+          # 检查矩阵是否为空
+          if [ -z "$matrix_json" ] || [ "$matrix_json" = "null" ]; then
+            echo "错误: 生成的矩阵为空"
+            exit 1
+          fi
+
           # 调试输出
-          echo "matrix_json starts with: ${matrix_json:0:10}"
+          echo "原始架构列表:"
+          printf "%s\n" "${arch_list[@]}"
+          echo "去重后架构列表:"
+          printf "%s\n" "${unique_archs[@]}"
+          echo "matrix_json starts with: ${matrix_json:0:100}"
           echo "matrix=$matrix_json" >> $GITHUB_OUTPUT
           echo "$matrix_json"
 
