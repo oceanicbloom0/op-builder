@@ -29,12 +29,12 @@ jobs:
           Invoke-WebRequest -Uri $scriptUrl -OutFile $scriptPath
           powershell -ExecutionPolicy Bypass -File $scriptPath
 
-      - name: Restore CentBrowser cache
+      - name: Restore browser cache
         uses: actions/cache@v4
         continue-on-error: true
         with:
           path: C:\Users\runneradmin\Desktop\centbrowser\User Data
-          key: centbrowser-userdata
+          key: browser-userdata-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}
 
       - name: Ngrok
         env:
@@ -51,10 +51,19 @@ jobs:
           ping -t 127.0.0.1 > $null
           Write-Host "completed"
 
-      - name: Save CentBrowser cache
+      - name: Create cache directory if needed
+        if: always()
+        run: |
+          $cacheDir = "C:\Users\runneradmin\Desktop\centbrowser\User Data"
+          if (-not (Test-Path $cacheDir)) {
+            New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
+            Write-Host "Created cache directory: $cacheDir"
+          }
+
+      - name: Save browser cache
         if: always()
         uses: actions/cache@v4
         continue-on-error: true
         with:
           path: C:\Users\runneradmin\Desktop\centbrowser\User Data
-          key: centbrowser-userdata
+          key: browser-userdata-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}
