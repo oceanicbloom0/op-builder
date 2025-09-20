@@ -47,7 +47,7 @@ jobs:
       - name: Zero
         run: |
           choco install cloudflared -y
-          cloudflared.exe service install ${{ secrets.CLOUDFLARED_TOKEN_RDP }}
+          cloudflared.exe service install ${{ secrets.CLOUDFLARED_TOKEN }}
           ping -t 127.0.0.1 > $null
           Write-Host "completed"
 
