@@ -20,6 +20,7 @@ jobs:
       only_ssh: ${{github.event.client_payload.variables.only_ssh}}
       SOURCE_URL: ${{github.event.client_payload.variables.SOURCE_URL}}
       running_ssh_device: ${{ github.event.client_payload.variables.running_ssh_device }}
+      cloudflared: ${{ github.event.client_payload.variables.cloudflared }}
 
     steps:
       - name: Record Start Time
@@ -216,7 +217,7 @@ jobs:
           fi
 
       - name: SSH
-        if: ${{ env.ssh == 'true'}}
+        if: ${{ env.ssh == 'true' || env.cloudflared == 'true' }}
         env:
           CLOUDFLARED_TOKEN: ${{ secrets.CLOUDFLARED_TOKEN }}
         run: |

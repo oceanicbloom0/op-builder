@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenWRT 编译控制台</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>OpenWRT 编译控制台</h1>
+            <div class="status" id="status">就绪</div>
+        </header>
+
+        <div class="control-panel">
+            <h2>编译配置</h2>
+            <form id="buildForm">
+                <div class="form-group">
+                    <label for="openwrtSource">OpenWRT 源码仓库:</label>
+                    <input type="text" id="openwrtSource" value="https://github.com/coolsnowwolf/lede.git" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="openwrtBranch">分支:</label>
+                    <input type="text" id="openwrtBranch" value="master" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="configPath">配置文件路径:</label>
+                    <input type="text" id="configPath" value="configs/app.config" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="device">目标设备:</label>
+                    <select id="device" required>
+                        <option value="">选择设备...</option>
+                    </select>
+                </div>
+
+                <div class="checkbox-group">
+                    <label>
+                        <input type="checkbox" id="enableSSH"> 启用 SSH
+                    </label>
+                    <label>
+                        <input type="checkbox" id="onlySSH"> 仅 SSH
+                    </label>
+                    <label>
+                        <input type="checkbox" id="enableCloudflared"> 启用 Cloudflare Tunnel
+                    </label>
+                </div>
+
+                <div class="form-group" id="sshDeviceGroup" style="display: none;">
+                    <label for="sshDevice">SSH 运行设备:</label>
+                    <input type="text" id="sshDevice" value="x86-64">
+                </div>
+
+                <button type="submit" id="startBuild">开始编译</button>
+            </form>
+        </div>
+
+        <div class="log-panel">
+            <h2>编译日志</h2>
+            <div class="log-output" id="logOutput"></div>
+        </div>
+
+        <div class="progress-panel">
+            <h2>编译进度</h2>
+            <div class="progress-bar">
+                <div class="progress" id="progressBar"></div>
+            </div>
+            <div class="progress-steps" id="progressSteps"></div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
