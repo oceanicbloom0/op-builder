@@ -1,4 +1,4 @@
-name: Build Toolchain Daily
+name: Build Toolchain
 
 on:
   schedule:

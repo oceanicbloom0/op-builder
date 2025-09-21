@@ -1,12 +1,12 @@
-name: Action-Cleaner
+name: Clean Workflow
 on:
   # push:
   workflow_dispatch:
     inputs:
       ready:
-        description: "ready"
+        description: "Set true to run"
         required: false
-        default: "GO!"
+        default: "true"
 
 jobs:
   cleaner:

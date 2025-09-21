@@ -1,4 +1,4 @@
-name: Test on Windows
+name: Build Launcher
 
 on:
   workflow_dispatch:

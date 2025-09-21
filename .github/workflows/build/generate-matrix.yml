@@ -1,4 +1,4 @@
-name: Build OpenWrt => Main
+name: Generate Matrix
 
 on:
   workflow_dispatch:

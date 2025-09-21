@@ -1,4 +1,4 @@
-name: Build OpenWrt => Build
+name: Compile
 
 on:
   repository_dispatch:
