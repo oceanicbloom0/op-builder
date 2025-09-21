@@ -15,6 +15,10 @@ on:
         description: "Path to the application configuration file"
         required: true
         default: "configs/app.config"
+      devices:
+        description: "Specific devices to build (comma-separated, empty for all)"
+        required: false
+        default: ""
       trigger-build-event-type:
         description: "Trigger build event type name"
         required: true
@@ -63,28 +67,70 @@ jobs:
 
       - id: set-matrix
         run: |
+          # Validate if device exists
+          validate_device() {
+            local device=$1
+            if [ -d "configs/$device" ] || [ -d "configs/STANDALONE_CONF/$device" ]; then
+              return 0
+            else
+              return 1
+            fi
+          }
+
+          # Generate JSON matrix
+          generate_matrix() {
+            local devices=$1
+            local matrix="{\"include\":["
+            for device in $devices; do
+              if validate_device "$device"; then
+                matrix="$matrix{\"device\":\"$device\"},"
+              else
+                echo "Warning: Device $device not found, skipping"
+              fi
+            done
+            matrix=${matrix%,}  # Remove last comma
+            matrix="$matrix]}"
+            echo "$matrix"
+          }
+
           cd configs
-          matrix="{\"include\":["
-          for d in */ ; do
+
+          if [ -n "${{ inputs.devices }}" ]; then
+            # Manual device selection
+            echo "Using manually specified devices: ${{ inputs.devices }}"
+            IFS=',' read -ra DEVICE_ARRAY <<< "${{ inputs.devices }}"
+            device_list=""
+            for device in "${DEVICE_ARRAY[@]}"; do
+              device=$(echo "$device" | xargs) # Trim whitespace
+              device_list="$device_list $device"
+            done
+            matrix=$(generate_matrix "$device_list")
+          else
+            # Build all devices
+            echo "Building all devices"
+            matrix="{\"include\":["
+            for d in */ ; do
               if [ "$d" = "STANDALONE_CONF/" ]; then
-                  continue
+                continue
               fi
               device_name=${d%/}
               matrix="$matrix{\"device\":\"$device_name\"},"
-          done
-          if [ -d "STANDALONE_CONF" ]; then
+            done
+            if [ -d "STANDALONE_CONF" ]; then
               cd STANDALONE_CONF
               for d in */ ; do
-                  device_name=${d%/}
-                  matrix="$matrix{\"device\":\"$device_name\"},"
+                device_name=${d%/}
+                matrix="$matrix{\"device\":\"$device_name\"},"
               done
               cd ..
+            fi
+            matrix=${matrix%,}
+            matrix="$matrix]}"
           fi
-          matrix=${matrix%,}
-          matrix="$matrix]}"
+
           cd ..
           echo "matrix=$matrix" >> $GITHUB_OUTPUT
-          echo $matrix
+          echo "Generated matrix: $matrix"
 
   trigger-build:
     needs: generate-matrix
