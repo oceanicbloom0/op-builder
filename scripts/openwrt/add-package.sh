@@ -10,7 +10,6 @@ git clone --depth 1 https://github.com/nikkinikki-org/OpenWrt-nikki && mv -n Ope
 git clone --depth 1 https://github.com/ophub/luci-app-amlogic.git op-amlogic && mv -n op-amlogic/luci-app-amlogic ./ && rm -rf op-amlogic
 
 ## Themes
-git clone --depth 1 https://github.com/derisamedia/luci-theme-alpha.git
-git clone --depth 1 https://github.com/sirpdboy/luci-theme-kucat.git
-
+git clone --depth 1 https://github.com/jerrykuku/luci-theme-argon.git
+git clone --depth 1 https://github.com/jerrykuku/luci-app-argon-config.git
 exit 0
