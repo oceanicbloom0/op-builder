@@ -67,10 +67,12 @@ jobs:
 
       - id: set-matrix
         run: |
-          # Validate if device exists
+          cd configs
+
+          # Validate if device exists (run in configs directory)
           validate_device() {
             local device=$1
-            if [ -d "configs/$device" ] || [ -d "configs/STANDALONE_CONF/$device" ]; then
+            if [ -d "$device" ] || [ -d "STANDALONE_CONF/$device" ]; then
               return 0
             else
               return 1
@@ -92,8 +94,6 @@ jobs:
             matrix="$matrix]}"
             echo "$matrix"
           }
-
-          cd configs
 
           if [ -n "${{ inputs.devices }}" ]; then
             # Manual device selection
