@@ -9,8 +9,24 @@ if [ -f "$CONFIG_PATH" ]; then
         # Append additional app configuration if specified
         cat "$GITHUB_WORKSPACE/$APP_CONFIG" >>"$OPENWRT_PATH/.config"
     fi
+    # Append theme configuration
+    if [ -f "$GITHUB_WORKSPACE/configs/theme.config" ]; then
+        cat "$GITHUB_WORKSPACE/configs/theme.config" >>"$OPENWRT_PATH/.config"
+    fi
+    # Append ccache configuration
+    if [ -f "$GITHUB_WORKSPACE/configs/ccache.config" ]; then
+        cat "$GITHUB_WORKSPACE/configs/ccache.config" >>"$OPENWRT_PATH/.config"
+    fi
 elif [ -f "$STANDALONE_CONF_PATH" ]; then
     cp "$STANDALONE_CONF_PATH" "$OPENWRT_PATH/.config"
+    # Append theme configuration
+    if [ -f "$GITHUB_WORKSPACE/configs/theme.config" ]; then
+        cat "$GITHUB_WORKSPACE/configs/theme.config" >>"$OPENWRT_PATH/.config"
+    fi
+    # Append ccache configuration
+    if [ -f "$GITHUB_WORKSPACE/configs/ccache.config" ]; then
+        cat "$GITHUB_WORKSPACE/configs/ccache.config" >>"$OPENWRT_PATH/.config"
+    fi
 else
     echo "Error: .config file not found for DEVICE=$DEVICE"
     exit 1
