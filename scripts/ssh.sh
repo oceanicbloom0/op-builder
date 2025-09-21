@@ -4,7 +4,7 @@ set -uo pipefail
 
 OWNER="$1"
 
-curl -fsSLO https://starship.rs/install.sh && sh ./install.sh --yes
+curl -fsSLO https://starship.rs/install.sh && ARCH= sh ./install.sh --yes
 rm ./install.sh
 echo 'eval "$(starship init bash)"' >>/home/runner/.bashrc
 echo 'eval "$(starship init bash)"' | sudo tee /root/.bashrc
