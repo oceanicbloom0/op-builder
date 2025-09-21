@@ -47,7 +47,7 @@ heartbeat_monitor() {
     while kill -0 $pid 2>/dev/null; do
         count=$((count + 1))
         echo "[SSH Heartbeat] Tunnel active - $(date '+%Y-%m-%d %H:%M:%S') - Check #$count"
-        sleep 300  # 5分钟
+        sleep 10  # 10s
     done
     echo "[SSH Heartbeat] Tunnel disconnected - $(date '+%Y-%m-%d %H:%M:%S')"
 }
