@@ -86,7 +86,17 @@ jobs:
             local matrix="{\"include\":["
             for device in $devices; do
               if validate_device "$device"; then
-                matrix="$matrix{\"device\":\"$device\"},"
+                # Only include devices that need to be built
+                # If SSH is enabled, only include the running_ssh_device
+                # If SSH is disabled, include all devices
+                if [ "${{ inputs.ssh }}" = "true" ] || [ "${{ inputs.only_ssh }}" = "true" ]; then
+                  if [ "$device" = "${{ inputs.running_ssh_device }}" ]; then
+                    matrix="$matrix{\"device\":\"$device\",\"ssh\":\"${{ inputs.ssh }}\",\"only_ssh\":\"${{ inputs.only_ssh }}\"},"
+                  fi
+                else
+                  # SSH disabled, include all devices
+                  matrix="$matrix{\"device\":\"$device\",\"ssh\":\"false\",\"only_ssh\":\"false\"},"
+                fi
               else
                 echo "Warning: Device $device not found, skipping"
               fi
@@ -115,13 +125,33 @@ jobs:
                 continue
               fi
               device_name=${d%/}
-              matrix="$matrix{\"device\":\"$device_name\"},"
+              # Only include devices that need to be built
+              # If SSH is enabled, only include the running_ssh_device
+              # If SSH is disabled, include all devices
+              if [ "${{ inputs.ssh }}" = "true" ] || [ "${{ inputs.only_ssh }}" = "true" ]; then
+                if [ "$device_name" = "${{ inputs.running_ssh_device }}" ]; then
+                  matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"${{ inputs.ssh }}\",\"only_ssh\":\"${{ inputs.only_ssh }}\"},"
+                fi
+              else
+                # SSH disabled, include all devices
+                matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"false\",\"only_ssh\":\"false\"},"
+              fi
             done
             if [ -d "STANDALONE_CONF" ]; then
               cd STANDALONE_CONF
               for d in */ ; do
                 device_name=${d%/}
-                matrix="$matrix{\"device\":\"$device_name\"},"
+                # Only include devices that need to be built
+                # If SSH is enabled, only include the running_ssh_device
+                # If SSH is disabled, include all devices
+                if [ "${{ inputs.ssh }}" = "true" ] || [ "${{ inputs.only_ssh }}" = "true" ]; then
+                  if [ "$device_name" = "${{ inputs.running_ssh_device }}" ]; then
+                    matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"${{ inputs.ssh }}\",\"only_ssh\":\"${{ inputs.only_ssh }}\"},"
+                  fi
+                else
+                  # SSH disabled, include all devices
+                  matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"false\",\"only_ssh\":\"false\"},"
+                fi
               done
               cd ..
             fi
@@ -155,8 +185,8 @@ jobs:
                 "SOURCE_BRANCH": "${{ env.SOURCE_BRANCH }}",
                 "TOOLCHAIN_TAG": "${{ env.TOOLCHAIN_TAG }}",
                 "APP_CONFIG": "${{ env.APP_CONFIG_PATH }}",
-                "ssh": "${{ inputs.ssh }}",
-                "only_ssh": "${{ inputs.only_ssh }}",
+                "ssh": "${{ matrix.ssh }}",
+                "only_ssh": "${{ matrix.only_ssh }}",
                 "SOURCE_URL": "${{ env.SOURCE_URL }}",
                 "running_ssh_device": "${{ inputs.running_ssh_device }}",
                 "FIRMWARE_NAME": "${{ env.FIRMWARE_NAME }}",
