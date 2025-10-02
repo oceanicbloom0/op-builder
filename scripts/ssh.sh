@@ -3,6 +3,7 @@ set -e
 set -uo pipefail
 
 OWNER="$1"
+SSH_FLAG="$2"
 
 curl -fsSLO https://starship.rs/install.sh && ARCH= sh ./install.sh --yes
 rm ./install.sh
@@ -22,7 +23,12 @@ else
     exit 1
 fi
 
-docker run -d --net=host cloudflare/cloudflared:latest tunnel --no-autoupdate run --token $CLOUDFLARED_TOKEN || true
+# Only run cloudflared in background if SSH is enabled
+if [ "$SSH_FLAG" = "true" ]; then
+    docker run -d --net=host cloudflare/cloudflared:latest tunnel --no-autoupdate run --token $CLOUDFLARED_TOKEN || true
+else
+    docker run --net=host cloudflare/cloudflared:latest tunnel --no-autoupdate run --token $CLOUDFLARED_TOKEN || true
+fi
 
 # Continue
 echo "[SSH Script] Continue with the next steps."
