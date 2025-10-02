@@ -41,6 +41,7 @@ on:
 env:
   SOURCE_URL: ${{ inputs.openwrt_source }}
   SOURCE_BRANCH: ${{ inputs.openwrt_source_branch }}
+  APP_CONFIG_PATH: ${{ inputs.app_config_path }}
 
 jobs:
   generate-matrix:
