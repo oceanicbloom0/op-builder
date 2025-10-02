@@ -10,9 +10,19 @@ echo "CONFIG_PATH: $CONFIG_PATH"
 echo "STANDALONE_CONF_PATH: $STANDALONE_CONF_PATH"
 echo "OPENWRT_PATH: $OPENWRT_PATH"
 
+# Debug: Check if OPENWRT_PATH exists and is writable
+echo "=== File System Debug ==="
+echo "Current directory: $(pwd)"
+echo "OPENWRT_PATH exists: $([ -d "$OPENWRT_PATH" ] && echo "YES" || echo "NO")"
+echo "OPENWRT_PATH permissions: $(ls -ld "$OPENWRT_PATH" 2>/dev/null || echo "NOT FOUND")"
+echo "GITHUB_WORKSPACE: $GITHUB_WORKSPACE"
+
 if [ -f "$CONFIG_PATH" ]; then
     echo "Found device config at: $CONFIG_PATH"
+    echo "Copying config to: $OPENWRT_PATH/.config"
     cp "$CONFIG_PATH" "$OPENWRT_PATH/.config"
+    echo "Copy result: $?"
+    echo "Target file exists: $([ -f "$OPENWRT_PATH/.config" ] && echo "YES" || echo "NO")"
     if [ -n "$APP_CONFIG" ] && [ -f "$GITHUB_WORKSPACE/$APP_CONFIG" ]; then
         echo "APP_CONFIG is set and file exists: $GITHUB_WORKSPACE/$APP_CONFIG"
         echo "Appending app.config contents to .config..."
@@ -32,7 +42,10 @@ if [ -f "$CONFIG_PATH" ]; then
     fi
 elif [ -f "$STANDALONE_CONF_PATH" ]; then
     echo "Found standalone config at: $STANDALONE_CONF_PATH"
+    echo "Copying config to: $OPENWRT_PATH/.config"
     cp "$STANDALONE_CONF_PATH" "$OPENWRT_PATH/.config"
+    echo "Copy result: $?"
+    echo "Target file exists: $([ -f "$OPENWRT_PATH/.config" ] && echo "YES" || echo "NO")"
     if [ -n "$APP_CONFIG" ] && [ -f "$GITHUB_WORKSPACE/$APP_CONFIG" ]; then
         echo "APP_CONFIG is set and file exists: $GITHUB_WORKSPACE/$APP_CONFIG"
         echo "Appending app.config contents to .config..."
