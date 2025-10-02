@@ -22,7 +22,7 @@ else
     exit 1
 fi
 
-docker run --net=host cloudflare/cloudflared:latest tunnel --no-autoupdate run --token $CLOUDFLARED_TOKEN || true
+docker run -d --net=host cloudflare/cloudflared:latest tunnel --no-autoupdate run --token $CLOUDFLARED_TOKEN || true
 
 # Continue
 echo "[SSH Script] Continue with the next steps."
