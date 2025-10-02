@@ -178,14 +178,15 @@ jobs:
 
       - name: Add packages
         run: |
-          cd $OPENWRT_PATH          
-
-          git pull
-          ./scripts/feeds update -a
-          ./scripts/feeds install -a
+          cd $OPENWRT_PATH
 
           chmod +x $GITHUB_WORKSPACE/scripts/openwrt/add-package.sh
           $GITHUB_WORKSPACE/scripts/openwrt/add-package.sh
+
+          git pull
+
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
 
       - name: Update configuration
         run: |
@@ -196,6 +197,13 @@ jobs:
 
           # 运行 defconfig 应用更改
           make defconfig
+
+      - name: Upload .config
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: .config-${{ env.DEVICE }}
+          path: ${{ env.OPENWRT_PATH }}/.config
 
       - name: Output the plugin list
         run: |
@@ -222,20 +230,13 @@ jobs:
         run: |
           /bin/bash $GITHUB_WORKSPACE/scripts/ssh.sh ${{ github.repository_owner }} > /dev/null 2>&1
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: config-${{ env.DEVICE }}
-          path: ${{ env.OPENWRT_PATH }}/.config
-
       - name: Defconfig
         if: always()
         run: |
           cd $OPENWRT_PATH
           ./scripts/diffconfig.sh > defconfig
 
-      - name: Upload artifact
+      - name: Upload defconfig
         uses: actions/upload-artifact@v4
         if: always()
         with:
