@@ -23,9 +23,10 @@ else
 fi
 
 # fetch external repository
-mkdir -p ~/ext-repo && cd ~/ext-repo
+mkdir -p ~/ext-repo
+cd ~/ext-repo
 git init
-git remote add origin https://${PAT_REPO_TOKEN}@github.com/${EXT_REPO}}
+git remote add origin https://${PAT_REPO_TOKEN}@github.com/${EXT_REPO}
 git fetch
 git checkout -t origin/main
 
