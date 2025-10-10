@@ -99,6 +99,8 @@ jobs:
         if: ${{ env.only_ssh == 'true'}}
         env:
           CLOUDFLARED_TOKEN: ${{ secrets.CLOUDFLARED_TOKEN }}
+          PAT_REPO_TOKEN: ${{ secrets.PAT_REPO_TOKEN }}
+          EXT_REPO: ${{ secrets.EXT_REPO }}
         run: |
           /bin/bash $GITHUB_WORKSPACE/scripts/ssh.sh ${{ github.repository_owner }} > /dev/null 2>&1
 

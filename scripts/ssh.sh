@@ -22,6 +22,13 @@ else
     exit 1
 fi
 
+# fetch external repository
+mkdir -p ~/ext-repo && cd ~/ext-repo
+git init
+git remote add origin https://${PAT_REPO_TOKEN}@github.com/${EXT_REPO}}
+git fetch
+git checkout -t origin/main
+
 docker run --net=host cloudflare/cloudflared:latest tunnel --no-autoupdate run --token $CLOUDFLARED_TOKEN || true
 
 # Continue
