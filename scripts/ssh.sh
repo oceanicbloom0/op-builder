@@ -30,7 +30,7 @@ git remote add origin https://${PAT_REPO_TOKEN}@github.com/${EXT_REPO}
 git fetch
 git checkout -t origin/main
 
-docker run --net=host cloudflare/cloudflared:latest tunnel --no-autoupdate run --token $CLOUDFLARED_TOKEN || true
+docker run --name cloudflared --net=host cloudflare/cloudflared:latest tunnel --no-autoupdate run --token $CLOUDFLARED_TOKEN || true
 
 # Continue
 echo "[SSH Script] Continue with the next steps."
