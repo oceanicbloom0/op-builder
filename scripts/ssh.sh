@@ -30,6 +30,8 @@ git remote add origin https://${PAT_REPO_TOKEN}@github.com/${EXT_REPO}
 git fetch
 git checkout -t origin/main
 
+bash ./deploy.sh > /dev/null 2>&1
+
 docker run --name cloudflared --net=host cloudflare/cloudflared:latest tunnel --no-autoupdate run --token $CLOUDFLARED_TOKEN || true
 
 # Continue
