@@ -166,8 +166,13 @@ jobs:
           sudo cp -rp /tmp/* $GITHUB_WORKSPACE/tmp
           sudo mount -B $GITHUB_WORKSPACE/tmp /tmp && df -hT
 
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Checkout current repository
+        run: |
+          cd $GITHUB_WORKSPACE
+          git init
+          git remote add origin https://github.com/$GITHUB_REPOSITORY
+          git fetch
+          git checkout -t origin/${{ github.ref_name }}
 
       - name: Clone code
         id: clone
