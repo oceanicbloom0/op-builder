@@ -141,9 +141,6 @@ jobs:
       ARCH: ${{ matrix.arch }}
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Combination disk
         continue-on-error: true
         run: |
@@ -168,6 +165,9 @@ jobs:
           mkdir -p $GITHUB_WORKSPACE/tmp && chmod 777 $GITHUB_WORKSPACE/tmp
           sudo cp -rp /tmp/* $GITHUB_WORKSPACE/tmp
           sudo mount -B $GITHUB_WORKSPACE/tmp /tmp && df -hT
+
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Clone code
         id: clone
