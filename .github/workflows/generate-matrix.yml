@@ -37,7 +37,7 @@ on:
         default: "configs/app.config"
 
       device_config:
-        description: "[Mode: config] 指定编译设备。可为 'all' 表示全部，或用逗号分隔多个设备名。"
+        description: "[Mode: config] 指定编译设备。用逗号分隔多个设备名。"
         required: false
         type: string
       trigger-build-event-type:
