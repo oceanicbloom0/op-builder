@@ -6,11 +6,13 @@
 # 参数说明：
 # $1 - 设备模式 (all/config)
 # $2 - 设备配置名 (模式为config时使用)
-# $3 - 设备配置文件路径 (可选，默认为configs/devices.config)
+# $3 - 调试模式设备名 (模式为debug时使用)
+# $4 - 设备配置文件路径 (可选，默认为configs/devices.config)
 
 DEVICE_MODE="$1"
 DEVICE_CONFIG="$2"
-DEVICE_CONFIG_FILE="${3:-configs/devices.config}"
+DEBUG_DEVICE="$3"
+DEVICE_CONFIG_FILE="${4:-configs/devices.config}"
 
 # 解析设备配置文件函数
 parse_device_config_file() {
@@ -103,6 +105,21 @@ validate_device() {
 
 # 根据模式解析设备列表
 case "$DEVICE_MODE" in
+    "debug")
+        # 调试模式 - 使用指定的单个设备
+        if [ -z "$DEBUG_DEVICE" ]; then
+            echo "Error: debug_device is required when device_mode=debug" >&2
+            exit 1
+        fi
+
+        # 验证设备是否存在
+        if [ -d "configs/$DEBUG_DEVICE" ] || [ -d "configs/STANDALONE_CONF/$DEBUG_DEVICE" ]; then
+            echo "[{\"name\":\"$DEBUG_DEVICE\",\"description\":\"Debug device\",\"sources\":\"\"}]"
+        else
+            echo "Error: Device '$DEBUG_DEVICE' not found in configs/ or configs/STANDALONE_CONF/" >&2
+            exit 1
+        fi
+        ;;
     "all")
         # 所有设备模式 - 扫描configs目录
         devices_json="["
@@ -153,7 +170,7 @@ case "$DEVICE_MODE" in
         fi
         ;;
     *)
-        echo "Error: Invalid device_mode '$DEVICE_MODE'. Must be one of: all, config" >&2
+        echo "Error: Invalid device_mode '$DEVICE_MODE'. Must be one of: debug, all, config" >&2
         exit 1
         ;;
 esac

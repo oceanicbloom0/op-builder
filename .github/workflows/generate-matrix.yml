@@ -42,6 +42,10 @@ on:
         description: "设备配置名（仅在 device_mode=config 时使用）。可为 'all' 表示全部。"
         required: false
         type: string
+      debug_device:
+        description: "调试模式设备名（仅在 mode=debug 时使用）。指定要编译的设备目录名。"
+        required: false
+        type: string
       trigger-build-event-type:
         description: "Trigger build event type name"
         required: true
@@ -107,10 +111,18 @@ jobs:
       - name: Resolve devices
         id: resolve-devices
         run: |
+          # 如果源码模式是debug，则设备模式自动设为debug
+          if [ "${{ github.event.inputs.mode }}" = "debug" ]; then
+            device_mode="debug"
+          else
+            device_mode="${{ github.event.inputs.device_mode }}"
+          fi
+
           # 解析设备配置
           devices_json=$(./scripts/resolve-devices.sh \
-            "${{ github.event.inputs.device_mode }}" \
-            "${{ github.event.inputs.device_config }}")
+            "$device_mode" \
+            "${{ github.event.inputs.device_config }}" \
+            "${{ github.event.inputs.debug_device }}")
 
           # 检查是否有错误
           if [ $? -ne 0 ]; then
