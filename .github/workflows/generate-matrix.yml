@@ -68,6 +68,9 @@ jobs:
       - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
 
+      - name: Set script permissions
+        run: chmod +x scripts/*.sh
+
       - name: Resolve sources
         id: resolve-sources
         run: |
