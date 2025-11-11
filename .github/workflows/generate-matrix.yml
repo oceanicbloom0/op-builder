@@ -30,8 +30,21 @@ on:
         description: "Path to the application configuration file"
         required: true
         default: "configs/app.config"
+      device_mode:
+        description: "设备选择模式：all = 所有设备；config = 从配置文件选择；specific = 指定特定设备"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - config
+          - specific
+      device_config:
+        description: "设备配置名（仅在 device_mode=config 时使用）。可为 'all' 表示全部。"
+        required: false
+        type: string
       devices:
-        description: "Specific devices to build (comma-separated, empty for all)"
+        description: "特定设备列表（仅在 device_mode=specific 时使用，逗号分隔）"
         required: false
         default: ""
       trigger-build-event-type:
@@ -88,8 +101,38 @@ jobs:
           echo "Resolved sources:"
           echo "$sources_json"
 
+  resolve-devices:
+    runs-on: ubuntu-22.04
+    outputs:
+      devices_json: ${{ steps.resolve-devices.outputs.devices_json }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set script permissions
+        run: chmod +x scripts/*.sh
+
+      - name: Resolve devices
+        id: resolve-devices
+        run: |
+          # 解析设备配置
+          devices_json=$(./scripts/resolve-devices.sh \
+            "${{ github.event.inputs.device_mode }}" \
+            "${{ github.event.inputs.device_config }}" \
+            "${{ github.event.inputs.devices }}")
+
+          # 检查是否有错误
+          if [ $? -ne 0 ]; then
+            echo "Error: Failed to resolve devices"
+            exit 1
+          fi
+
+          echo "devices_json=$devices_json" >> $GITHUB_OUTPUT
+          echo "Resolved devices:"
+          echo "$devices_json"
+
   generate-matrix:
-    needs: resolve-sources
+    needs: [resolve-sources, resolve-devices]
     runs-on: ubuntu-22.04
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
@@ -111,117 +154,82 @@ jobs:
             fi
           done < "env.config"
 
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
       - id: set-matrix
         run: |
-          cd configs
+          # 获取源码和设备配置
+          sources_json='${{ needs.resolve-sources.outputs.sources_json }}'
+          devices_json='${{ needs.resolve-devices.outputs.devices_json }}'
 
-          # Validate if device exists (run in configs directory)
-          validate_device() {
-            local device=$1
-            if [ -d "$device" ] || [ -d "STANDALONE_CONF/$device" ]; then
-              return 0
-            else
-              return 1
-            fi
-          }
+          echo "Sources JSON: $sources_json"
+          echo "Devices JSON: $devices_json"
 
-          # Generate JSON matrix
-          generate_matrix() {
-            local devices=$1
-            local sources_json='${{ needs.resolve-sources.outputs.sources_json }}'
-            local matrix="{\"include\":["
+          # 检查是否有源码和设备
+          sources_count=$(echo "$sources_json" | jq length)
+          devices_count=$(echo "$devices_json" | jq length)
 
-            # 解析源码配置
-            sources_count=$(echo "$sources_json" | jq length)
-            if [ "$sources_count" -eq 0 ]; then
-              echo "Error: No sources found"
-              exit 1
-            fi
+          if [ "$sources_count" -eq 0 ]; then
+            echo "Error: No sources found"
+            exit 1
+          fi
 
-            for device in $devices; do
-              if validate_device "$device"; then
-                # 为每个源码配置生成设备矩阵
-                for i in $(seq 0 $((sources_count - 1))); do
-                  source_name=$(echo "$sources_json" | jq -r ".[$i].name")
-                  source_url=$(echo "$sources_json" | jq -r ".[$i].source")
-                  source_branch=$(echo "$sources_json" | jq -r ".[$i].branch")
+          if [ "$devices_count" -eq 0 ]; then
+            echo "Error: No devices found"
+            exit 1
+          fi
 
-                  # Only include devices that need to be built
-                  # If SSH is enabled, only include the running_ssh_device
-                  # If SSH is disabled, include all devices
-                  if [ "${{ inputs.ssh }}" = "true" ] || [ "${{ inputs.only_ssh }}" = "true" ]; then
-                    if [ "$device" = "${{ inputs.running_ssh_device }}" ]; then
-                      matrix="$matrix{\"device\":\"$device\",\"ssh\":\"${{ inputs.ssh }}\",\"only_ssh\":\"${{ inputs.only_ssh }}\",\"source_name\":\"$source_name\",\"source_url\":\"$source_url\",\"source_branch\":\"$source_branch\"},"
+          # 生成矩阵
+          matrix="{\"include\":["
+
+          # 遍历每个设备
+          for device_index in $(seq 0 $((devices_count - 1))); do
+            device_name=$(echo "$devices_json" | jq -r ".[$device_index].name")
+            device_source=$(echo "$devices_json" | jq -r ".[$device_index].source")
+
+            echo "Processing device: $device_name, preferred source: $device_source"
+
+            # 验证设备是否存在
+            if [ -d "configs/$device_name" ] || [ -d "configs/STANDALONE_CONF/$device_name" ]; then
+              # 如果设备有指定的源码配置，优先使用
+              if [ -n "$device_source" ] && [ "$device_source" != "null" ]; then
+                # 查找指定的源码配置
+                source_found=false
+                for source_index in $(seq 0 $((sources_count - 1))); do
+                  source_name=$(echo "$sources_json" | jq -r ".[$source_index].name")
+                  if [ "$source_name" = "$device_source" ]; then
+                    source_url=$(echo "$sources_json" | jq -r ".[$source_index].source")
+                    source_branch=$(echo "$sources_json" | jq -r ".[$source_index].branch")
+
+                    # 检查是否需要构建此设备
+                    if [ "${{ inputs.ssh }}" = "true" ] || [ "${{ inputs.only_ssh }}" = "true" ]; then
+                      if [ "$device_name" = "${{ inputs.running_ssh_device }}" ]; then
+                        matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"${{ inputs.ssh }}\",\"only_ssh\":\"${{ inputs.only_ssh }}\",\"source_name\":\"$source_name\",\"source_url\":\"$source_url\",\"source_branch\":\"$source_branch\"},"
+                        source_found=true
+                      fi
+                    else
+                      # SSH disabled, include device
+                      matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"false\",\"only_ssh\":\"false\",\"source_name\":\"$source_name\",\"source_url\":\"$source_url\",\"source_branch\":\"$source_branch\"},"
+                      source_found=true
                     fi
-                  else
-                    # SSH disabled, include all devices
-                    matrix="$matrix{\"device\":\"$device\",\"ssh\":\"false\",\"only_ssh\":\"false\",\"source_name\":\"$source_name\",\"source_url\":\"$source_url\",\"source_branch\":\"$source_branch\"},"
+                    break
                   fi
                 done
-              else
-                echo "Warning: Device $device not found, skipping"
-              fi
-            done
-            matrix=${matrix%,}  # Remove last comma
-            matrix="$matrix]}"
-            echo "$matrix"
-          }
 
-          if [ -n "${{ inputs.devices }}" ]; then
-            # Manual device selection
-            echo "Using manually specified devices: ${{ inputs.devices }}"
-            IFS=',' read -ra DEVICE_ARRAY <<< "${{ inputs.devices }}"
-            device_list=""
-            for device in "${DEVICE_ARRAY[@]}"; do
-              device=$(echo "$device" | xargs) # Trim whitespace
-              device_list="$device_list $device"
-            done
-            matrix=$(generate_matrix "$device_list")
-          else
-            # Build all devices
-            echo "Building all devices"
-            matrix="{\"include\":["
-            sources_json='${{ needs.resolve-sources.outputs.sources_json }}'
-            sources_count=$(echo "$sources_json" | jq length)
-
-            for d in */ ; do
-              if [ "$d" = "STANDALONE_CONF/" ]; then
-                continue
-              fi
-              device_name=${d%/}
-
-              # 为每个源码配置生成设备矩阵
-              for i in $(seq 0 $((sources_count - 1))); do
-                source_name=$(echo "$sources_json" | jq -r ".[$i].name")
-                source_url=$(echo "$sources_json" | jq -r ".[$i].source")
-                source_branch=$(echo "$sources_json" | jq -r ".[$i].branch")
-
-                # Only include devices that need to be built
-                # If SSH is enabled, only include the running_ssh_device
-                # If SSH is disabled, include all devices
-                if [ "${{ inputs.ssh }}" = "true" ] || [ "${{ inputs.only_ssh }}" = "true" ]; then
-                  if [ "$device_name" = "${{ inputs.running_ssh_device }}" ]; then
-                    matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"${{ inputs.ssh }}\",\"only_ssh\":\"${{ inputs.only_ssh }}\",\"source_name\":\"$source_name\",\"source_url\":\"$source_url\",\"source_branch\":\"$source_branch\"},"
-                  fi
-                else
-                  # SSH disabled, include all devices
-                  matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"false\",\"only_ssh\":\"false\",\"source_name\":\"$source_name\",\"source_url\":\"$source_url\",\"source_branch\":\"$source_branch\"},"
+                if [ "$source_found" = false ]; then
+                  echo "Warning: Preferred source '$device_source' not found for device '$device_name', using all sources"
                 fi
-              done
-            done
-            if [ -d "STANDALONE_CONF" ]; then
-              cd STANDALONE_CONF
-              for d in */ ; do
-                device_name=${d%/}
-                # 为每个源码配置生成设备矩阵
-                for i in $(seq 0 $((sources_count - 1))); do
-                  source_name=$(echo "$sources_json" | jq -r ".[$i].name")
-                  source_url=$(echo "$sources_json" | jq -r ".[$i].source")
-                  source_branch=$(echo "$sources_json" | jq -r ".[$i].branch")
+              fi
 
-                  # Only include devices that need to be built
-                  # If SSH is enabled, only include the running_ssh_device
-                  # If SSH is disabled, include all devices
+              # 如果没有指定源码配置或未找到，使用所有源码配置
+              if [ -z "$device_source" ] || [ "$device_source" = "null" ] || [ "$source_found" = false ]; then
+                for source_index in $(seq 0 $((sources_count - 1))); do
+                  source_name=$(echo "$sources_json" | jq -r ".[$source_index].name")
+                  source_url=$(echo "$sources_json" | jq -r ".[$source_index].source")
+                  source_branch=$(echo "$sources_json" | jq -r ".[$source_index].branch")
+
+                  # 检查是否需要构建此设备
                   if [ "${{ inputs.ssh }}" = "true" ] || [ "${{ inputs.only_ssh }}" = "true" ]; then
                     if [ "$device_name" = "${{ inputs.running_ssh_device }}" ]; then
                       matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"${{ inputs.ssh }}\",\"only_ssh\":\"${{ inputs.only_ssh }}\",\"source_name\":\"$source_name\",\"source_url\":\"$source_url\",\"source_branch\":\"$source_branch\"},"
@@ -231,14 +239,15 @@ jobs:
                     matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"false\",\"only_ssh\":\"false\",\"source_name\":\"$source_name\",\"source_url\":\"$source_url\",\"source_branch\":\"$source_branch\"},"
                   fi
                 done
-              done
-              cd ..
+              fi
+            else
+              echo "Warning: Device $device_name not found, skipping"
             fi
-            matrix=${matrix%,}
-            matrix="$matrix]}"
-          fi
+          done
 
-          cd ..
+          matrix=${matrix%,}  # Remove last comma
+          matrix="$matrix]}"
+
           echo "matrix=$matrix" >> $GITHUB_OUTPUT
           echo "Generated matrix: $matrix"
 
