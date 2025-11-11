@@ -22,6 +22,10 @@ on:
         required: false
         default: "master"
         type: string
+      debug_device:
+        description: "调试模式设备名（仅在 mode=debug 时使用）。指定要编译的设备目录名。"
+        required: false
+        type: string
       config_name:
         description: "配置文件中的配置名（仅在 mode=config 时使用）。可为 'all' 表示全部。"
         required: false
@@ -40,10 +44,6 @@ on:
           - config
       device_config:
         description: "设备配置名（仅在 device_mode=config 时使用）。可为 'all' 表示全部。"
-        required: false
-        type: string
-      debug_device:
-        description: "调试模式设备名（仅在 mode=debug 时使用）。指定要编译的设备目录名。"
         required: false
         type: string
       trigger-build-event-type:
