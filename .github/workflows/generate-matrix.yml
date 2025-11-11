@@ -51,18 +51,15 @@ on:
         description: "Trigger build event type name"
         required: true
         default: "trigger-build-openwrt"
-      ssh:
-        description: "Enable SSH"
+      ssh_mode:
+        description: "SSH模式：none = 禁用SSH；enable = 启用SSH；only = 仅SSH模式"
         required: true
-        type: boolean
-      only_ssh:
-        description: "Use SSH only"
-        required: true
-        type: boolean
-      running_ssh_device:
-        description: "Name of the device where SSH is running"
-        required: true
-        default: "x86-64"
+        default: "none"
+        type: choice
+        options:
+          - none
+          - enable
+          - only
   repository_dispatch:
     types: [trigger-build-openwrt_main]
 
@@ -203,16 +200,25 @@ jobs:
                     source_branch=$(echo "$sources_json" | jq -r ".[$source_index].branch")
 
                     # 检查是否需要构建此设备
-                    if [ "${{ inputs.ssh }}" = "true" ] || [ "${{ inputs.only_ssh }}" = "true" ]; then
-                      if [ "$device_name" = "${{ inputs.running_ssh_device }}" ]; then
-                        matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"${{ inputs.ssh }}\",\"only_ssh\":\"${{ inputs.only_ssh }}\",\"source_name\":\"$source_name\",\"source_url\":\"$source_url\",\"source_branch\":\"$source_branch\"},"
+                    case "${{ inputs.ssh_mode }}" in
+                      "none")
+                        # SSH disabled, include device
+                        matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"false\",\"only_ssh\":\"false\",\"source_name\":\"$source_name\",\"source_url\":\"$source_url\",\"source_branch\":\"$source_branch\"},"
                         source_found=true
-                      fi
-                    else
-                      # SSH disabled, include device
-                      matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"false\",\"only_ssh\":\"false\",\"source_name\":\"$source_name\",\"source_url\":\"$source_url\",\"source_branch\":\"$source_branch\"},"
-                      source_found=true
-                    fi
+                        ;;
+                      "enable")
+                        # SSH enabled, include all devices
+                        matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"true\",\"only_ssh\":\"false\",\"source_name\":\"$source_name\",\"source_url\":\"$source_url\",\"source_branch\":\"$source_branch\"},"
+                        source_found=true
+                        ;;
+                      "only")
+                        # SSH only mode, only include x86-64 device
+                        if [ "$device_name" = "x86-64" ]; then
+                          matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"true\",\"only_ssh\":\"true\",\"source_name\":\"$source_name\",\"source_url\":\"$source_url\",\"source_branch\":\"$source_branch\"},"
+                          source_found=true
+                        fi
+                        ;;
+                    esac
                     break
                   fi
                 done
@@ -230,14 +236,22 @@ jobs:
                   source_branch=$(echo "$sources_json" | jq -r ".[$source_index].branch")
 
                   # 检查是否需要构建此设备
-                  if [ "${{ inputs.ssh }}" = "true" ] || [ "${{ inputs.only_ssh }}" = "true" ]; then
-                    if [ "$device_name" = "${{ inputs.running_ssh_device }}" ]; then
-                      matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"${{ inputs.ssh }}\",\"only_ssh\":\"${{ inputs.only_ssh }}\",\"source_name\":\"$source_name\",\"source_url\":\"$source_url\",\"source_branch\":\"$source_branch\"},"
-                    fi
-                  else
-                    # SSH disabled, include all devices
-                    matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"false\",\"only_ssh\":\"false\",\"source_name\":\"$source_name\",\"source_url\":\"$source_url\",\"source_branch\":\"$source_branch\"},"
-                  fi
+                  case "${{ inputs.ssh_mode }}" in
+                    "none")
+                      # SSH disabled, include all devices
+                      matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"false\",\"only_ssh\":\"false\",\"source_name\":\"$source_name\",\"source_url\":\"$source_url\",\"source_branch\":\"$source_branch\"},"
+                      ;;
+                    "enable")
+                      # SSH enabled, include all devices
+                      matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"true\",\"only_ssh\":\"false\",\"source_name\":\"$source_name\",\"source_url\":\"$source_url\",\"source_branch\":\"$source_branch\"},"
+                      ;;
+                    "only")
+                      # SSH only mode, only include x86-64 device
+                      if [ "$device_name" = "x86-64" ]; then
+                        matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"true\",\"only_ssh\":\"true\",\"source_name\":\"$source_name\",\"source_url\":\"$source_url\",\"source_branch\":\"$source_branch\"},"
+                      fi
+                      ;;
+                  esac
                 done
               fi
             else
@@ -277,7 +291,6 @@ jobs:
                 "only_ssh": "${{ matrix.only_ssh }}",
                 "SOURCE_URL": "${{ matrix.source_url }}",
                 "SOURCE_NAME": "${{ matrix.source_name }}",
-                "running_ssh_device": "${{ inputs.running_ssh_device }}",
                 "FIRMWARE_NAME": "${{ env.FIRMWARE_NAME }}",
                 "RELEASE_TAG": "${{ env.RELEASE_TAG }}"
               }
