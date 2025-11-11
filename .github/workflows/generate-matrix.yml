@@ -66,10 +66,10 @@ env:
   APP_CONFIG_PATH: ${{ inputs.app_config_path }}
 
 jobs:
-  resolve-sources:
+  resolve-configs:
     runs-on: ubuntu-22.04
     outputs:
-      sources_json: ${{ steps.resolve-sources.outputs.sources_json }}
+      configs_json: ${{ steps.resolve-configs.outputs.configs_json }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -77,65 +77,31 @@ jobs:
       - name: Set script permissions
         run: chmod +x scripts/*.sh
 
-      - name: Resolve sources
-        id: resolve-sources
+      - name: Resolve sources and devices
+        id: resolve-configs
         run: |
-          # 解析源码配置
-          sources_json=$(./scripts/resolve-sources.sh \
+          # 解析源码和设备配置
+          configs_json=$(./scripts/resolve-sources.sh \
             "${{ github.event.inputs.mode }}" \
             "${{ github.event.inputs.source_url }}" \
             "${{ github.event.inputs.source_branch }}" \
-            "${{ github.event.inputs.config_name }}")
-
-          # 检查是否有错误
-          if [ $? -ne 0 ]; then
-            echo "Error: Failed to resolve sources"
-            exit 1
-          fi
-
-          echo "sources_json=$sources_json" >> $GITHUB_OUTPUT
-          echo "Resolved sources:"
-          echo "$sources_json"
-
-  resolve-devices:
-    runs-on: ubuntu-22.04
-    outputs:
-      devices_json: ${{ steps.resolve-devices.outputs.devices_json }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set script permissions
-        run: chmod +x scripts/*.sh
-
-      - name: Resolve devices
-        id: resolve-devices
-        run: |
-          # 如果源码模式是debug，则设备模式自动设为debug
-          if [ "${{ github.event.inputs.mode }}" = "debug" ]; then
-            device_mode="debug"
-          else
-            device_mode="${{ github.event.inputs.device_mode }}"
-          fi
-
-          # 解析设备配置
-          devices_json=$(./scripts/resolve-devices.sh \
-            "$device_mode" \
+            "${{ github.event.inputs.config_name }}" \
+            "${{ github.event.inputs.device_mode }}" \
             "${{ github.event.inputs.device_config }}" \
             "${{ github.event.inputs.debug_device }}")
 
           # 检查是否有错误
           if [ $? -ne 0 ]; then
-            echo "Error: Failed to resolve devices"
+            echo "Error: Failed to resolve sources and devices"
             exit 1
           fi
 
-          echo "devices_json=$devices_json" >> $GITHUB_OUTPUT
-          echo "Resolved devices:"
-          echo "$devices_json"
+          echo "configs_json=$configs_json" >> $GITHUB_OUTPUT
+          echo "Resolved configs:"
+          echo "$configs_json"
 
   generate-matrix:
-    needs: [resolve-sources, resolve-devices]
+    needs: [resolve-configs]
     runs-on: ubuntu-22.04
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
@@ -163,8 +129,13 @@ jobs:
       - id: set-matrix
         run: |
           # 获取源码和设备配置
-          sources_json='${{ needs.resolve-sources.outputs.sources_json }}'
-          devices_json='${{ needs.resolve-devices.outputs.devices_json }}'
+          configs_json='${{ needs.resolve-configs.outputs.configs_json }}'
+
+          echo "Configs JSON: $configs_json"
+
+          # 提取源码和设备配置
+          sources_json=$(echo "$configs_json" | jq -r '.sources')
+          devices_json=$(echo "$configs_json" | jq -r '.devices')
 
           echo "Sources JSON: $sources_json"
           echo "Devices JSON: $devices_json"
