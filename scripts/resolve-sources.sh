@@ -39,14 +39,7 @@ case "$MODE" in
             SOURCE_BRANCH="master"
         fi
         # 单个源码模式 - 创建一个临时的源码配置
-        echo "["
-        echo "  {"
-        echo "    \"name\": \"custom\","
-        echo "    \"source\": \"$SOURCE_URL\","
-        echo "    \"branch\": \"$SOURCE_BRANCH\","
-        echo "    \"description\": \"Custom source URL\""
-        echo "  }"
-        echo "]"
+        echo "[{\"name\":\"custom\",\"source\":\"$SOURCE_URL\",\"branch\":\"$SOURCE_BRANCH\",\"description\":\"Custom source URL\"}]"
         ;;
     "config")
         if [ -z "$CONFIG_NAME" ] || [ "$CONFIG_NAME" = "all" ]; then
@@ -55,14 +48,15 @@ case "$MODE" in
         else
             # 使用特定配置
             sources_json=$(parse_config_file)
-            # 使用grep和sed来过滤特定配置（不使用jq）
-            if echo "$sources_json" | grep -q "\"name\": \"$CONFIG_NAME\""; then
-                # 提取特定配置
-                echo "$sources_json" | sed -n '/{/,/}/p' | grep -A 100 "\"name\": \"$CONFIG_NAME\"" | sed -n '/{/,/}/p' | head -n 5
+            # 使用grep和sed来过滤特定配置
+            if echo "$sources_json" | grep -q "\"name\":\"$CONFIG_NAME\""; then
+                # 提取特定配置 - 使用更精确的匹配
+                # 将整个JSON数组拆分为单独的对象，然后过滤
+                echo "$sources_json" | sed 's/},{/}\n{/g' | grep "\"name\":\"$CONFIG_NAME\""
             else
                 echo "Error: Config '$CONFIG_NAME' not found in $CONFIG_FILE" >&2
                 echo "Available configs:" >&2
-                echo "$sources_json" | grep '"name":' | sed 's/.*"name": "\([^"]*\)".*/  - \1/' >&2
+                echo "$sources_json" | sed 's/},{/}\n{/g' | grep '"name":' | sed 's/.*"name":"\([^"]*\)".*/  - \1/' >&2
                 exit 1
             fi
         fi
