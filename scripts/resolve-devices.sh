@@ -4,15 +4,13 @@
 # 根据模式解析要构建的设备列表
 
 # 参数说明：
-# $1 - 设备模式 (all/config/specific)
+# $1 - 设备模式 (all/config)
 # $2 - 设备配置名 (模式为config时使用)
-# $3 - 特定设备列表 (模式为specific时使用，逗号分隔)
-# $4 - 设备配置文件路径 (可选，默认为configs/devices.config)
+# $3 - 设备配置文件路径 (可选，默认为configs/devices.config)
 
 DEVICE_MODE="$1"
 DEVICE_CONFIG="$2"
-SPECIFIC_DEVICES="$3"
-DEVICE_CONFIG_FILE="${4:-configs/devices.config}"
+DEVICE_CONFIG_FILE="${3:-configs/devices.config}"
 
 # 解析设备配置文件函数
 parse_device_config_file() {
@@ -154,33 +152,8 @@ case "$DEVICE_MODE" in
             fi
         fi
         ;;
-    "specific")
-        if [ -z "$SPECIFIC_DEVICES" ]; then
-            echo "Error: devices parameter is required when device_mode=specific" >&2
-            exit 1
-        fi
-        # 特定设备模式
-        devices_json="["
-        first=true
-        IFS=',' read -ra DEVICE_ARRAY <<< "$SPECIFIC_DEVICES"
-        for device in "${DEVICE_ARRAY[@]}"; do
-            device=$(echo "$device" | xargs) # Trim whitespace
-            if validate_device "$device"; then
-                if [ "$first" = true ]; then
-                    devices_json="${devices_json}{\"name\":\"$device\",\"description\":\"Manual selection\",\"source\":\"\"}"
-                    first=false
-                else
-                    devices_json="${devices_json},{\"name\":\"$device\",\"description\":\"Manual selection\",\"source\":\"\"}"
-                fi
-            else
-                echo "Warning: Device $device not found, skipping" >&2
-            fi
-        done
-        devices_json="${devices_json}]"
-        echo "$devices_json"
-        ;;
     *)
-        echo "Error: Invalid device_mode '$DEVICE_MODE'. Must be one of: all, config, specific" >&2
+        echo "Error: Invalid device_mode '$DEVICE_MODE'. Must be one of: all, config" >&2
         exit 1
         ;;
 esac

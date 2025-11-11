@@ -31,22 +31,17 @@ on:
         required: true
         default: "configs/app.config"
       device_mode:
-        description: "设备选择模式：all = 所有设备；config = 从配置文件选择；specific = 指定特定设备"
+        description: "设备选择模式：all = 所有设备；config = 从配置文件选择"
         required: true
         default: "all"
         type: choice
         options:
           - all
           - config
-          - specific
       device_config:
         description: "设备配置名（仅在 device_mode=config 时使用）。可为 'all' 表示全部。"
         required: false
         type: string
-      devices:
-        description: "特定设备列表（仅在 device_mode=specific 时使用，逗号分隔）"
-        required: false
-        default: ""
       trigger-build-event-type:
         description: "Trigger build event type name"
         required: true
@@ -115,8 +110,7 @@ jobs:
           # 解析设备配置
           devices_json=$(./scripts/resolve-devices.sh \
             "${{ github.event.inputs.device_mode }}" \
-            "${{ github.event.inputs.device_config }}" \
-            "${{ github.event.inputs.devices }}")
+            "${{ github.event.inputs.device_config }}")
 
           # 检查是否有错误
           if [ $? -ne 0 ]; then
