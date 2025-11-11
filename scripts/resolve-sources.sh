@@ -6,13 +6,15 @@
 # 参数说明：
 # $1 - 模式 (single/config/all)
 # $2 - 源码地址 (模式为single时使用)
-# $3 - 配置名称 (模式为config时使用)
-# $4 - 配置文件路径 (可选，默认为configs/sources.config)
+# $3 - 源码分支 (模式为single时使用)
+# $4 - 配置名称 (模式为config时使用)
+# $5 - 配置文件路径 (可选，默认为configs/sources.config)
 
 MODE="$1"
 SOURCE_URL="$2"
-CONFIG_NAME="$3"
-CONFIG_FILE="${4:-configs/sources.config}"
+SOURCE_BRANCH="$3"
+CONFIG_NAME="$4"
+CONFIG_FILE="${5:-configs/sources.config}"
 
 # 检查配置文件是否存在
 if [ ! -f "$CONFIG_FILE" ]; then
@@ -32,12 +34,16 @@ case "$MODE" in
             echo "Error: source_url is required when mode=single" >&2
             exit 1
         fi
+        # 如果没有指定分支，使用默认值
+        if [ -z "$SOURCE_BRANCH" ]; then
+            SOURCE_BRANCH="master"
+        fi
         # 单个源码模式 - 创建一个临时的源码配置
         echo "["
         echo "  {"
         echo "    \"name\": \"custom\","
         echo "    \"source\": \"$SOURCE_URL\","
-        echo "    \"branch\": \"master\","
+        echo "    \"branch\": \"$SOURCE_BRANCH\","
         echo "    \"description\": \"Custom source URL\""
         echo "  }"
         echo "]"
