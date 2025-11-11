@@ -39,12 +39,12 @@ parse_device_config_file() {
         if [[ "$line_trimmed" =~ ^\[.*\]$ ]]; then
             # 如果之前有章节，写入临时文件
             if [ "$current_section" != "" ]; then
-                echo "{\"name\":\"$current_section\",\"description\":\"$current_description\",\"source\":\"$current_source\"}" >> "$TEMP_FILE"
+                echo "{\"name\":\"$current_section\",\"description\":\"$current_description\",\"sources\":\"$current_sources\"}" >> "$TEMP_FILE"
             fi
 
             current_section="$(echo "$line_trimmed" | sed 's/\[//; s/\]//')"
             current_description=""
-            current_source=""
+            current_sources=""
             continue
         fi
 
@@ -57,8 +57,8 @@ parse_device_config_file() {
                 "description")
                     current_description="$value"
                     ;;
-                "source")
-                    current_source="$value"
+                "source"|"sources")
+                    current_sources="$value"
                     ;;
             esac
         fi
@@ -66,7 +66,7 @@ parse_device_config_file() {
 
     # 写入最后一个章节
     if [ "$current_section" != "" ]; then
-        echo "{\"name\":\"$current_section\",\"description\":\"$current_description\",\"source\":\"$current_source\"}" >> "$TEMP_FILE"
+        echo "{\"name\":\"$current_section\",\"description\":\"$current_description\",\"sources\":\"$current_sources\"}" >> "$TEMP_FILE"
     fi
 
     # 构建 JSON 数组

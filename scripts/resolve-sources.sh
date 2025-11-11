@@ -4,9 +4,9 @@
 # 根据模式解析要构建的源码列表
 
 # 参数说明：
-# $1 - 模式 (single/config/all)
-# $2 - 源码地址 (模式为single时使用)
-# $3 - 源码分支 (模式为single时使用)
+# $1 - 模式 (debug/config/all)
+# $2 - 源码地址 (模式为debug时使用)
+# $3 - 源码分支 (模式为debug时使用)
 # $4 - 配置名称 (模式为config时使用)
 # $5 - 配置文件路径 (可选，默认为configs/sources.config)
 
@@ -29,17 +29,17 @@ parse_config_file() {
 
 # 根据模式解析源码列表
 case "$MODE" in
-    "single")
+    "debug")
         if [ -z "$SOURCE_URL" ]; then
-            echo "Error: source_url is required when mode=single" >&2
+            echo "Error: source_url is required when mode=debug" >&2
             exit 1
         fi
         # 如果没有指定分支，使用默认值
         if [ -z "$SOURCE_BRANCH" ]; then
             SOURCE_BRANCH="master"
         fi
-        # 单个源码模式 - 创建一个临时的源码配置
-        echo "[{\"name\":\"custom\",\"source\":\"$SOURCE_URL\",\"branch\":\"$SOURCE_BRANCH\",\"description\":\"Custom source URL\"}]"
+        # 调试模式 - 创建一个临时的源码配置
+        echo "[{\"name\":\"custom\",\"source\":\"$SOURCE_URL\",\"branch\":\"$SOURCE_BRANCH\",\"description\":\"Debug source URL\"}]"
         ;;
     "config")
         if [ -z "$CONFIG_NAME" ] || [ "$CONFIG_NAME" = "all" ]; then
@@ -66,7 +66,7 @@ case "$MODE" in
         parse_config_file
         ;;
     *)
-        echo "Error: Invalid mode '$MODE'. Must be one of: single, config, all" >&2
+        echo "Error: Invalid mode '$MODE'. Must be one of: debug, config, all" >&2
         exit 1
         ;;
 esac

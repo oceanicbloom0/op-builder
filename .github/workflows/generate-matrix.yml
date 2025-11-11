@@ -4,21 +4,21 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "运行模式：single = 使用单个源码地址；config = 从配置文件里选择一个；all = 编译配置文件中所有源码"
+        description: "运行模式：debug = 调试模式（直接输入源码地址）；config = 从配置文件选择；all = 编译所有配置"
         required: true
-        default: "single"
+        default: "debug"
         type: choice
         options:
-          - single
+          - debug
           - config
           - all
       source_url:
-        description: "单个源码地址（仅在 mode=single 时使用）"
+        description: "源码地址（仅在 mode=debug 时使用）"
         required: false
         default: "https://github.com/coolsnowwolf/lede.git"
         type: string
       source_branch:
-        description: "源码分支（仅在 mode=single 时使用）"
+        description: "源码分支（仅在 mode=debug 时使用）"
         required: false
         default: "master"
         type: string
@@ -183,53 +183,58 @@ jobs:
           # 遍历每个设备
           for device_index in $(seq 0 $((devices_count - 1))); do
             device_name=$(echo "$devices_json" | jq -r ".[$device_index].name")
-            device_source=$(echo "$devices_json" | jq -r ".[$device_index].source")
+            device_sources=$(echo "$devices_json" | jq -r ".[$device_index].sources")
 
-            echo "Processing device: $device_name, preferred source: $device_source"
+            echo "Processing device: $device_name, preferred sources: $device_sources"
 
             # 验证设备是否存在
             if [ -d "configs/$device_name" ] || [ -d "configs/STANDALONE_CONF/$device_name" ]; then
-              # 如果设备有指定的源码配置，优先使用
-              if [ -n "$device_source" ] && [ "$device_source" != "null" ]; then
-                # 查找指定的源码配置
-                source_found=false
-                for source_index in $(seq 0 $((sources_count - 1))); do
-                  source_name=$(echo "$sources_json" | jq -r ".[$source_index].name")
-                  if [ "$source_name" = "$device_source" ]; then
-                    source_url=$(echo "$sources_json" | jq -r ".[$source_index].source")
-                    source_branch=$(echo "$sources_json" | jq -r ".[$source_index].branch")
+              # 如果设备有指定的源码配置，优先使用指定的源码
+              if [ -n "$device_sources" ] && [ "$device_sources" != "null" ] && [ "$device_sources" != "" ]; then
+                # 将逗号分隔的源码列表转换为数组
+                IFS=',' read -ra preferred_sources <<< "$device_sources"
 
-                    # 检查是否需要构建此设备
-                    case "${{ inputs.ssh_mode }}" in
-                      "none")
-                        # SSH disabled, include device
-                        matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"false\",\"only_ssh\":\"false\",\"source_name\":\"$source_name\",\"source_url\":\"$source_url\",\"source_branch\":\"$source_branch\"},"
-                        source_found=true
-                        ;;
-                      "enable")
-                        # SSH enabled, include all devices
-                        matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"true\",\"only_ssh\":\"false\",\"source_name\":\"$source_name\",\"source_url\":\"$source_url\",\"source_branch\":\"$source_branch\"},"
-                        source_found=true
-                        ;;
-                      "only")
-                        # SSH only mode, only include x86-64 device
-                        if [ "$device_name" = "x86-64" ]; then
-                          matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"true\",\"only_ssh\":\"true\",\"source_name\":\"$source_name\",\"source_url\":\"$source_url\",\"source_branch\":\"$source_branch\"},"
+                # 遍历指定的源码配置
+                for preferred_source in "${preferred_sources[@]}"; do
+                  preferred_source=$(echo "$preferred_source" | xargs) # 去除空格
+                  source_found=false
+
+                  for source_index in $(seq 0 $((sources_count - 1))); do
+                    source_name=$(echo "$sources_json" | jq -r ".[$source_index].name")
+                    if [ "$source_name" = "$preferred_source" ]; then
+                      source_url=$(echo "$sources_json" | jq -r ".[$source_index].source")
+                      source_branch=$(echo "$sources_json" | jq -r ".[$source_index].branch")
+
+                      # 检查是否需要构建此设备
+                      case "${{ inputs.ssh_mode }}" in
+                        "none")
+                          # SSH disabled, include device
+                          matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"false\",\"only_ssh\":\"false\",\"source_name\":\"$source_name\",\"source_url\":\"$source_url\",\"source_branch\":\"$source_branch\"},"
                           source_found=true
-                        fi
-                        ;;
-                    esac
-                    break
+                          ;;
+                        "enable")
+                          # SSH enabled, include all devices
+                          matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"true\",\"only_ssh\":\"false\",\"source_name\":\"$source_name\",\"source_url\":\"$source_url\",\"source_branch\":\"$source_branch\"},"
+                          source_found=true
+                          ;;
+                        "only")
+                          # SSH only mode, only include x86-64 device
+                          if [ "$device_name" = "x86-64" ]; then
+                            matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"true\",\"only_ssh\":\"true\",\"source_name\":\"$source_name\",\"source_url\":\"$source_url\",\"source_branch\":\"$source_branch\"},"
+                            source_found=true
+                          fi
+                          ;;
+                      esac
+                      break
+                    fi
+                  done
+
+                  if [ "$source_found" = false ]; then
+                    echo "Warning: Preferred source '$preferred_source' not found for device '$device_name'"
                   fi
                 done
-
-                if [ "$source_found" = false ]; then
-                  echo "Warning: Preferred source '$device_source' not found for device '$device_name', using all sources"
-                fi
-              fi
-
-              # 如果没有指定源码配置或未找到，使用所有源码配置
-              if [ -z "$device_source" ] || [ "$device_source" = "null" ] || [ "$source_found" = false ]; then
+              else
+                # 如果没有指定源码配置，使用所有源码配置
                 for source_index in $(seq 0 $((sources_count - 1))); do
                   source_name=$(echo "$sources_json" | jq -r ".[$source_index].name")
                   source_url=$(echo "$sources_json" | jq -r ".[$source_index].source")
