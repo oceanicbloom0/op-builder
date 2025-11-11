@@ -148,22 +148,63 @@ resolve_devices() {
             echo "$devices_json"
             ;;
         "config")
-            if [ -z "$DEVICE_CONFIG" ] || [ "$DEVICE_CONFIG" = "all" ]; then
+            if [ -z "$DEVICE_CONFIG" ]; then
+                echo "Error: device_config is required when device_mode=config" >&2
+                echo "Please specify device config name(s) separated by commas" >&2
+                exit 1
+            fi
+
+            if [ "$DEVICE_CONFIG" = "all" ]; then
                 # 使用所有设备配置
                 parse_device_config_file "$DEVICE_CONFIG_FILE"
             else
-                # 使用特定设备配置
+                # 使用逗号分隔的特定设备配置
                 devices_json=$(parse_device_config_file "$DEVICE_CONFIG_FILE")
-                # 使用grep和sed来过滤特定配置
-                if echo "$devices_json" | grep -q "\"name\":\"$DEVICE_CONFIG\""; then
-                    # 提取特定配置
-                    echo "$devices_json" | sed 's/},{/}\n{/g' | grep "\"name\":\"$DEVICE_CONFIG\""
-                else
-                    echo "Error: Device config '$DEVICE_CONFIG' not found in $DEVICE_CONFIG_FILE" >&2
+
+                # 将逗号分隔的设备列表转换为数组
+                IFS=',' read -ra device_list <<< "$DEVICE_CONFIG"
+
+                # 构建结果数组
+                result_json="["
+                first=true
+                found_devices=0
+
+                # 遍历每个请求的设备
+                for device in "${device_list[@]}"; do
+                    device=$(echo "$device" | xargs) # 去除空格
+                    device_found=false
+
+                    # 在设备配置中查找匹配的设备
+                    while IFS= read -r device_obj; do
+                        if echo "$device_obj" | grep -q "\"name\":\"$device\""; then
+                            if [ "$first" = true ]; then
+                                result_json="${result_json}${device_obj}"
+                                first=false
+                            else
+                                result_json="${result_json},${device_obj}"
+                            fi
+                            device_found=true
+                            found_devices=$((found_devices + 1))
+                            break
+                        fi
+                    done < <(echo "$devices_json" | sed 's/},{/}\n{/g')
+
+                    if [ "$device_found" = false ]; then
+                        echo "Warning: Device config '$device' not found in $DEVICE_CONFIG_FILE" >&2
+                    fi
+                done
+
+                result_json="${result_json}]"
+
+                # 检查是否至少找到一个设备
+                if [ "$found_devices" -eq 0 ]; then
+                    echo "Error: None of the specified device configs were found in $DEVICE_CONFIG_FILE" >&2
                     echo "Available device configs:" >&2
-                    echo "$devices_json" | sed 's/},{/}\n{/g' | grep '"name":' | sed 's/.*"name":"\([^"]*\)".*/  - \1/' >&2
+                    echo "$devices_json" | sed 's/},{/}\n{/g' | grep '\"name\":' | sed 's/.*\"name\":\"\([^\"]*\)\".*/  - \1/' >&2
                     exit 1
                 fi
+
+                echo "$result_json"
             fi
             ;;
         *)
@@ -214,7 +255,7 @@ case "$MODE" in
             else
                 echo "Error: Config '$CONFIG_NAME' not found in $CONFIG_FILE" >&2
                 echo "Available configs:" >&2
-                echo "$sources_json" | sed 's/},{/}\n{/g' | grep '"name":' | sed 's/.*"name":"\([^"]*\)".*/  - \1/' >&2
+                echo "$sources_json" | sed 's/},{/}\n{/g' | grep '\"name\":' | sed 's/.*\"name\":\"\([^\"]*\)\".*/  - \1/' >&2
                 exit 1
             fi
         fi

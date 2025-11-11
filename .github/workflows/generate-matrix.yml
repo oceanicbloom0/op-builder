@@ -44,7 +44,7 @@ on:
         default: "configs/app.config"
 
       device_config:
-        description: "[Mode: config] 设备配置名。可为 'all' 表示全部。"
+        description: "[Mode: config] 设备配置名。可为 'all' 表示全部，或用逗号分隔多个设备名。"
         required: false
         type: string
       trigger-build-event-type:
