@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "运行模式：debug = 调试模式（直接输入源码地址）；config = 从配置文件选择；all = 编译所有配置"
+        description: "[Mode: all/debug/config] 运行模式：debug = 调试模式（直接输入源码地址）；config = 从配置文件选择；all = 编译所有配置"
         required: true
         default: "debug"
         type: choice
@@ -13,37 +13,38 @@ on:
           - config
           - all
       source_url:
-        description: "源码地址（仅在 mode=debug 时使用）"
+        description: "[Mode: debug] 源码地址"
         required: false
         default: "https://github.com/coolsnowwolf/lede.git"
         type: string
       source_branch:
-        description: "源码分支（仅在 mode=debug 时使用）"
+        description: "[Mode: debug] 源码分支"
         required: false
         default: "master"
         type: string
       debug_device:
-        description: "调试模式设备名（仅在 mode=debug 时使用）。指定要编译的设备目录名。"
+        description: "[Mode: debug] 调试模式设备名。指定要编译的设备目录名。"
         required: false
         type: string
+      device_mode:
+        description: "[Mode: all/config] 设备选择模式：all = 所有设备；config = 从配置文件选择"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - config        
       config_name:
-        description: "配置文件中的配置名（仅在 mode=config 时使用）。可为 'all' 表示全部。"
+        description: "[Mode: config] 配置文件中的配置名。可为 'all' 表示全部。"
         required: false
         type: string
       app_config_path:
         description: "Path to the application configuration file"
         required: true
         default: "configs/app.config"
-      device_mode:
-        description: "设备选择模式：all = 所有设备；config = 从配置文件选择"
-        required: true
-        default: "all"
-        type: choice
-        options:
-          - all
-          - config
+
       device_config:
-        description: "设备配置名（仅在 device_mode=config 时使用）。可为 'all' 表示全部。"
+        description: "[Mode: config] 设备配置名。可为 'all' 表示全部。"
         required: false
         type: string
       trigger-build-event-type:
