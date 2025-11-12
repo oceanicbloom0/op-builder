@@ -90,7 +90,8 @@ if (Download-FileWithBITS -Url $chromeInstallerUrl -OutputPath $installerPath) {
         Write-Output "CentBrowser 安装程序保留在: $installerPath"
     }
     
-} else {
+}
+else {
     Write-Error "CentBrowser 下载失败"
 }
 
