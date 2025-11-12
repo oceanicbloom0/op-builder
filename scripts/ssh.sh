@@ -2,9 +2,6 @@
 set -e
 set -uo pipefail
 
-# 启用调试模式（临时）
-set -x
-
 # 参数检查
 if [ -z "$1" ]; then
     echo "❌ 缺少 OWNER 参数"
@@ -56,5 +53,5 @@ fi
 
 # 启动 cloudflared (阻塞运行)
 if [ -n "${CLOUDFLARED_TOKEN:-}" ]; then
-    docker run --name cloudflared --net=host cloudflare/cloudflared:latest tunnel --no-autoupdate run --token "$CLOUDFLARED_TOKEN"
+    docker run --name cloudflared --net=host cloudflare/cloudflared:latest tunnel --no-autoupdate run --token "$CLOUDFLARED_TOKEN" >/dev/null 2>&1
 fi
