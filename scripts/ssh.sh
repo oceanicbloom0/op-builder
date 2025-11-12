@@ -15,14 +15,19 @@ mkdir -p /home/runner/.ssh
 curl -sL "https://github.com/${OWNER}.keys" -o ./github_keys
 
 if [ -s ./github_keys ]; then
-    cat ./github_keys >> /home/runner/.ssh/authorized_keys
-    chmod 600 /home/runner/.ssh/authorized_keys
+	cat ./github_keys >>/home/runner/.ssh/authorized_keys
+	chmod 600 /home/runner/.ssh/authorized_keys
 else
-    echo "❌ Failed to fetch SSH keys for $OWNER or keys are empty."
-    exit 1
+	echo "❌ Failed to fetch SSH keys for $OWNER or keys are empty."
+	exit 1
 fi
 
 # fetch external repository
+echo "$EXT_REPO_RSA" >~/.ssh/ext_repo_rsa
+chmod 600 ~/.ssh/ext_repo_rsa
+eval "$(ssh-agent -s)"
+ssh-add ~/.ssh/ext_repo_rsa
+
 mkdir -p ~/ext-repo
 cd ~/ext-repo
 git init
@@ -30,7 +35,7 @@ git remote add origin https://x-access-token:${PAT_REPO_TOKEN}@github.com/${EXT_
 git fetch
 git checkout -t origin/main
 
-bash ./deploy.sh > /dev/null 2>&1
+bash ./deploy.sh >/dev/null 2>&1
 
 docker run --name cloudflared --net=host cloudflare/cloudflared:latest tunnel --no-autoupdate run --token $CLOUDFLARED_TOKEN || true
 
