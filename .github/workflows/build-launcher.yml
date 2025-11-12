@@ -31,6 +31,7 @@ jobs:
 
       - name: Zero
         run: |
+          winget settings --enable sourceAgreements
           winget install Tailscale.Tailscale
           tailscale up --auth-key ${{ secrets.TS_KEY }} --hostname "action-win" 
           choco install cloudflared -y
