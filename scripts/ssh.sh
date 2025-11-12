@@ -39,7 +39,11 @@ if [ -n "${EXT_REPO:-}" ] && [ -n "${PAT_REPO_TOKEN:-}" ]; then
 
     if git ls-remote origin >/dev/null 2>&1; then
         git fetch
-        DEFAULT_BRANCH=$(git remote show origin | grep "HEAD branch" | cut -d":" -f2 | tr -d ' ' || echo "main")
+        
+        DEFAULT_BRANCH=$(git remote show origin 2>/dev/null | grep "HEAD branch" | cut -d":" -f2 | tr -d ' ')
+        if [ -z "$DEFAULT_BRANCH" ]; then
+            DEFAULT_BRANCH="main"
+        fi
         git checkout "${DEFAULT_BRANCH}"
 
         if [ -f "./deploy.sh" ]; then
