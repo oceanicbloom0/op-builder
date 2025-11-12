@@ -100,7 +100,7 @@ jobs:
         env:
           CLOUDFLARED_TOKEN: ${{ secrets.CLOUDFLARED_TOKEN }}
           EXT_REPO: ${{ secrets.EXT_REPO }}
-          EXT_REPO_RSA: ${{ secrets.EXT_REPO_RSA }}
+          ACTION_RSA: ${{ secrets.ACTION_RSA }}
         run: |
           /bin/bash $GITHUB_WORKSPACE/scripts/ssh.sh ${{ github.repository_owner }} > /dev/null 2>&1
 
@@ -225,7 +225,7 @@ jobs:
         env:
           CLOUDFLARED_TOKEN: ${{ secrets.CLOUDFLARED_TOKEN }}
           EXT_REPO: ${{ secrets.EXT_REPO }}
-          EXT_REPO_RSA: ${{ secrets.EXT_REPO_RSA }}
+          ACTION_RSA: ${{ secrets.ACTION_RSA }}
         run: |
           /bin/bash $GITHUB_WORKSPACE/scripts/ssh.sh ${{ github.repository_owner }}
 
