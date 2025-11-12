@@ -3,48 +3,99 @@ name: Generate Matrix
 on:
   workflow_dispatch:
     inputs:
-      openwrt_source:
-        description: "OpenWRT source repository"
+      mode:
+        description: "[Mode: all/debug/config] 运行模式：debug = 调试模式（直接输入源码地址）；config = 从配置文件选择；all = 编译所有配置"
         required: true
+        default: "debug"
+        type: choice
+        options:
+          - debug
+          - config
+          - all
+      source_url:
+        description: "[Mode: debug] 源码地址"
+        required: false
         default: "https://github.com/coolsnowwolf/lede.git"
-      openwrt_source_branch:
-        description: "Branch of the OpenWRT source repository"
-        required: true
+        type: string
+      source_branch:
+        description: "[Mode: debug] 源码分支"
+        required: false
         default: "master"
+        type: string
+      debug_device:
+        description: "[Mode: debug] 调试模式设备名。指定要编译的设备目录名。"
+        required: false
+        default: "x86-64"
+        type: string
+        
+      config_name:
+        description: "[Mode: config] 配置文件中的配置名。可为 'all' 表示全部。"
+        required: false
+        type: string
       app_config_path:
         description: "Path to the application configuration file"
         required: true
         default: "configs/app.config"
-      devices:
-        description: "Specific devices to build (comma-separated, empty for all)"
+
+      device_config:
+        description: "[Mode: config] 指定编译设备。用逗号分隔多个设备名。"
         required: false
-        default: ""
+        type: string
       trigger-build-event-type:
         description: "Trigger build event type name"
         required: true
         default: "trigger-build-openwrt"
-      ssh:
-        description: "Enable SSH"
+      ssh_mode:
+        description: "SSH模式：none = 禁用SSH；enable = 启用SSH；only = 仅SSH模式"
         required: true
-        type: boolean
-      only_ssh:
-        description: "Use SSH only"
-        required: true
-        type: boolean
-      running_ssh_device:
-        description: "Name of the device where SSH is running"
-        required: true
-        default: "x86-64"
+        default: "none"
+        type: choice
+        options:
+          - none
+          - enable
+          - only
   repository_dispatch:
     types: [trigger-build-openwrt_main]
 
 env:
-  SOURCE_URL: ${{ inputs.openwrt_source }}
-  SOURCE_BRANCH: ${{ inputs.openwrt_source_branch }}
   APP_CONFIG_PATH: ${{ inputs.app_config_path }}
 
 jobs:
+  resolve-configs:
+    runs-on: ubuntu-22.04
+    outputs:
+      configs_json: ${{ steps.resolve-configs.outputs.configs_json }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set script permissions
+        run: chmod +x scripts/*.sh
+
+      - name: Resolve sources and devices
+        id: resolve-configs
+        run: |
+          # 解析源码和设备配置
+          configs_json=$(./scripts/resolve-sources.sh \
+            "${{ github.event.inputs.mode }}" \
+            "${{ github.event.inputs.source_url }}" \
+            "${{ github.event.inputs.source_branch }}" \
+            "${{ github.event.inputs.config_name }}" \
+            "${{ github.event.inputs.device_config }}" \
+            "${{ github.event.inputs.debug_device }}")
+
+          # 检查是否有错误
+          if [ $? -ne 0 ]; then
+            echo "Error: Failed to resolve sources and devices"
+            exit 1
+          fi
+
+          echo "configs_json=$configs_json" >> $GITHUB_OUTPUT
+          echo "Resolved configs:"
+          echo "$configs_json"
+
   generate-matrix:
+    needs: [resolve-configs]
     runs-on: ubuntu-22.04
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
@@ -66,100 +117,127 @@ jobs:
             fi
           done < "env.config"
 
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
       - id: set-matrix
         run: |
-          cd configs
+          # 获取源码和设备配置
+          configs_json='${{ needs.resolve-configs.outputs.configs_json }}'
 
-          # Validate if device exists (run in configs directory)
-          validate_device() {
-            local device=$1
-            if [ -d "$device" ] || [ -d "STANDALONE_CONF/$device" ]; then
-              return 0
-            else
-              return 1
-            fi
-          }
+          echo "Configs JSON: $configs_json"
 
-          # Generate JSON matrix
-          generate_matrix() {
-            local devices=$1
-            local matrix="{\"include\":["
-            for device in $devices; do
-              if validate_device "$device"; then
-                # Only include devices that need to be built
-                # If SSH is enabled, only include the running_ssh_device
-                # If SSH is disabled, include all devices
-                if [ "${{ inputs.ssh }}" = "true" ] || [ "${{ inputs.only_ssh }}" = "true" ]; then
-                  if [ "$device" = "${{ inputs.running_ssh_device }}" ]; then
-                    matrix="$matrix{\"device\":\"$device\",\"ssh\":\"${{ inputs.ssh }}\",\"only_ssh\":\"${{ inputs.only_ssh }}\"},"
-                  fi
-                else
-                  # SSH disabled, include all devices
-                  matrix="$matrix{\"device\":\"$device\",\"ssh\":\"false\",\"only_ssh\":\"false\"},"
-                fi
-              else
-                echo "Warning: Device $device not found, skipping"
-              fi
-            done
-            matrix=${matrix%,}  # Remove last comma
-            matrix="$matrix]}"
-            echo "$matrix"
-          }
+          # 提取源码和设备配置
+          sources_json=$(echo "$configs_json" | jq -r '.sources')
+          devices_json=$(echo "$configs_json" | jq -r '.devices')
 
-          if [ -n "${{ inputs.devices }}" ]; then
-            # Manual device selection
-            echo "Using manually specified devices: ${{ inputs.devices }}"
-            IFS=',' read -ra DEVICE_ARRAY <<< "${{ inputs.devices }}"
-            device_list=""
-            for device in "${DEVICE_ARRAY[@]}"; do
-              device=$(echo "$device" | xargs) # Trim whitespace
-              device_list="$device_list $device"
-            done
-            matrix=$(generate_matrix "$device_list")
-          else
-            # Build all devices
-            echo "Building all devices"
-            matrix="{\"include\":["
-            for d in */ ; do
-              if [ "$d" = "STANDALONE_CONF/" ]; then
-                continue
-              fi
-              device_name=${d%/}
-              # Only include devices that need to be built
-              # If SSH is enabled, only include the running_ssh_device
-              # If SSH is disabled, include all devices
-              if [ "${{ inputs.ssh }}" = "true" ] || [ "${{ inputs.only_ssh }}" = "true" ]; then
-                if [ "$device_name" = "${{ inputs.running_ssh_device }}" ]; then
-                  matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"${{ inputs.ssh }}\",\"only_ssh\":\"${{ inputs.only_ssh }}\"},"
-                fi
-              else
-                # SSH disabled, include all devices
-                matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"false\",\"only_ssh\":\"false\"},"
-              fi
-            done
-            if [ -d "STANDALONE_CONF" ]; then
-              cd STANDALONE_CONF
-              for d in */ ; do
-                device_name=${d%/}
-                # Only include devices that need to be built
-                # If SSH is enabled, only include the running_ssh_device
-                # If SSH is disabled, include all devices
-                if [ "${{ inputs.ssh }}" = "true" ] || [ "${{ inputs.only_ssh }}" = "true" ]; then
-                  if [ "$device_name" = "${{ inputs.running_ssh_device }}" ]; then
-                    matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"${{ inputs.ssh }}\",\"only_ssh\":\"${{ inputs.only_ssh }}\"},"
-                  fi
-                else
-                  # SSH disabled, include all devices
-                  matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"false\",\"only_ssh\":\"false\"},"
-                fi
-              done
-              cd ..
-            fi
-            matrix=${matrix%,}
-            matrix="$matrix]}"
+          echo "Sources JSON: $sources_json"
+          echo "Devices JSON: $devices_json"
+
+          # 检查是否有源码和设备
+          sources_count=$(echo "$sources_json" | jq length)
+          devices_count=$(echo "$devices_json" | jq length)
+
+          if [ "$sources_count" -eq 0 ]; then
+            echo "Error: No sources found"
+            exit 1
           fi
 
-          cd ..
+          if [ "$devices_count" -eq 0 ]; then
+            echo "Error: No devices found"
+            exit 1
+          fi
+
+          # 生成矩阵
+          matrix="{\"include\":["
+
+          # 遍历每个设备
+          for device_index in $(seq 0 $((devices_count - 1))); do
+            device_name=$(echo "$devices_json" | jq -r ".[$device_index].name")
+            device_sources=$(echo "$devices_json" | jq -r ".[$device_index].sources")
+
+            echo "Processing device: $device_name, preferred sources: $device_sources"
+
+            # 验证设备是否存在
+            if [ -d "configs/$device_name" ] || [ -d "configs/STANDALONE_CONF/$device_name" ]; then
+              # 如果设备有指定的源码配置，优先使用指定的源码
+              if [ -n "$device_sources" ] && [ "$device_sources" != "null" ] && [ "$device_sources" != "" ]; then
+                # 将逗号分隔的源码列表转换为数组
+                IFS=',' read -ra preferred_sources <<< "$device_sources"
+
+                # 遍历指定的源码配置
+                for preferred_source in "${preferred_sources[@]}"; do
+                  preferred_source=$(echo "$preferred_source" | xargs) # 去除空格
+                  source_found=false
+
+                  for source_index in $(seq 0 $((sources_count - 1))); do
+                    source_name=$(echo "$sources_json" | jq -r ".[$source_index].name")
+                    if [ "$source_name" = "$preferred_source" ]; then
+                      source_url=$(echo "$sources_json" | jq -r ".[$source_index].source")
+                      source_branch=$(echo "$sources_json" | jq -r ".[$source_index].branch")
+
+                      # 检查是否需要构建此设备
+                      case "${{ inputs.ssh_mode }}" in
+                        "none")
+                          # SSH disabled, include device
+                          matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"false\",\"only_ssh\":\"false\",\"source_name\":\"$source_name\",\"source_url\":\"$source_url\",\"source_branch\":\"$source_branch\"},"
+                          source_found=true
+                          ;;
+                        "enable")
+                          # SSH enabled, include all devices
+                          matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"true\",\"only_ssh\":\"false\",\"source_name\":\"$source_name\",\"source_url\":\"$source_url\",\"source_branch\":\"$source_branch\"},"
+                          source_found=true
+                          ;;
+                        "only")
+                          # SSH only mode, only include x86-64 device
+                          if [ "$device_name" = "x86-64" ]; then
+                            matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"true\",\"only_ssh\":\"true\",\"source_name\":\"$source_name\",\"source_url\":\"$source_url\",\"source_branch\":\"$source_branch\"},"
+                            source_found=true
+                          fi
+                          ;;
+                      esac
+                      break
+                    fi
+                  done
+
+                  if [ "$source_found" = false ]; then
+                    echo "Warning: Preferred source '$preferred_source' not found for device '$device_name'"
+                  fi
+                done
+              else
+                # 如果没有指定源码配置，使用所有源码配置
+                for source_index in $(seq 0 $((sources_count - 1))); do
+                  source_name=$(echo "$sources_json" | jq -r ".[$source_index].name")
+                  source_url=$(echo "$sources_json" | jq -r ".[$source_index].source")
+                  source_branch=$(echo "$sources_json" | jq -r ".[$source_index].branch")
+
+                  # 检查是否需要构建此设备
+                  case "${{ inputs.ssh_mode }}" in
+                    "none")
+                      # SSH disabled, include all devices
+                      matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"false\",\"only_ssh\":\"false\",\"source_name\":\"$source_name\",\"source_url\":\"$source_url\",\"source_branch\":\"$source_branch\"},"
+                      ;;
+                    "enable")
+                      # SSH enabled, include all devices
+                      matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"true\",\"only_ssh\":\"false\",\"source_name\":\"$source_name\",\"source_url\":\"$source_url\",\"source_branch\":\"$source_branch\"},"
+                      ;;
+                    "only")
+                      # SSH only mode, only include x86-64 device
+                      if [ "$device_name" = "x86-64" ]; then
+                        matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"true\",\"only_ssh\":\"true\",\"source_name\":\"$source_name\",\"source_url\":\"$source_url\",\"source_branch\":\"$source_branch\"},"
+                      fi
+                      ;;
+                  esac
+                done
+              fi
+            else
+              echo "Warning: Device $device_name not found, skipping"
+            fi
+          done
+
+          matrix=${matrix%,}  # Remove last comma
+          matrix="$matrix]}"
+
           echo "matrix=$matrix" >> $GITHUB_OUTPUT
           echo "Generated matrix: $matrix"
 
@@ -182,13 +260,13 @@ jobs:
             {
               "variables": {
                 "DEVICE": "${{ matrix.device }}",
-                "SOURCE_BRANCH": "${{ env.SOURCE_BRANCH }}",
+                "SOURCE_BRANCH": "${{ matrix.source_branch }}",
                 "TOOLCHAIN_TAG": "${{ env.TOOLCHAIN_TAG }}",
                 "APP_CONFIG": "${{ env.APP_CONFIG_PATH }}",
                 "ssh": "${{ matrix.ssh }}",
                 "only_ssh": "${{ matrix.only_ssh }}",
-                "SOURCE_URL": "${{ env.SOURCE_URL }}",
-                "running_ssh_device": "${{ inputs.running_ssh_device }}",
+                "SOURCE_URL": "${{ matrix.source_url }}",
+                "SOURCE_NAME": "${{ matrix.source_name }}",
                 "FIRMWARE_NAME": "${{ env.FIRMWARE_NAME }}",
                 "RELEASE_TAG": "${{ env.RELEASE_TAG }}"
               }

@@ -19,6 +19,7 @@ jobs:
       ssh: ${{github.event.client_payload.variables.ssh}}
       only_ssh: ${{github.event.client_payload.variables.only_ssh}}
       SOURCE_URL: ${{github.event.client_payload.variables.SOURCE_URL}}
+      SOURCE_NAME: ${{github.event.client_payload.variables.SOURCE_NAME}}
       running_ssh_device: ${{ github.event.client_payload.variables.running_ssh_device }}
 
     steps:
@@ -102,7 +103,7 @@ jobs:
           PAT_REPO_TOKEN: ${{ secrets.PAT_REPO_TOKEN }}
           EXT_REPO: ${{ secrets.EXT_REPO }}
         run: |
-          /bin/bash $GITHUB_WORKSPACE/scripts/ssh.sh ${{ github.repository_owner }} > /dev/null 2>&1
+          /bin/bash $GITHUB_WORKSPACE/scripts/ssh.sh ${{ github.repository_owner }}
 
       - name: Initialization environment
         env:
@@ -152,8 +153,12 @@ jobs:
 
       - name: Mount toolchain
         run: |
-          # Set SOURCE_REPO
-          export SOURCE_REPO="$(basename ${{ env.SOURCE_URL }} .git)"
+          # Set SOURCE_REPO - use SOURCE_NAME if available, otherwise fallback to basename
+          if [ -n "${{ env.SOURCE_NAME }}" ]; then
+            export SOURCE_REPO="${{ env.SOURCE_NAME }}"
+          else
+            export SOURCE_REPO="$(basename ${{ env.SOURCE_URL }} .git)"
+          fi
 
           for i in {0..9}
           do
@@ -223,7 +228,7 @@ jobs:
           PAT_REPO_TOKEN: ${{ secrets.PAT_REPO_TOKEN }}
           EXT_REPO: ${{ secrets.EXT_REPO }}
         run: |
-          /bin/bash $GITHUB_WORKSPACE/scripts/ssh.sh ${{ github.repository_owner }} > /dev/null 2>&1
+          /bin/bash $GITHUB_WORKSPACE/scripts/ssh.sh ${{ github.repository_owner }}
 
       - name: Defconfig
         if: always()
@@ -315,8 +320,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: "${{ env.FIRMWARE_NAME }} | ${{ env.DEVICE }}"
-          tag_name: "${{ env.RELEASE_TAG }}-${{ env.DEVICE }}"
+          name: "${{ env.FIRMWARE_NAME }} | ${{ env.DEVICE }} | ${{ env.SOURCE_NAME }}"
+          tag_name: "${{ env.RELEASE_TAG }}-${{ env.DEVICE }}-${{ env.SOURCE_NAME }}"
           body_path: ${{ github.workspace }}/release-text
           files: ${{ env.PACKAGED_OUTPUTPATH }}/*
 
