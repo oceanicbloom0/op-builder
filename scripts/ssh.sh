@@ -17,10 +17,10 @@ else
 fi
 
 # fetch external repository
-echo "$ACTION_RSA" >~/.ssh/ACTION_RSA
-chmod 600 ~/.ssh/ACTION_RSA
+echo "$ACTION_RSA" >~/.ssh/action-rsa
+chmod 600 ~/.ssh/action-rsa
 eval "$(ssh-agent -s)"
-ssh-add ~/.ssh/ACTION_RSA
+ssh-add ~/.ssh/action-rsa
 
 mkdir -p ~/ext-repo
 cd ~/ext-repo
