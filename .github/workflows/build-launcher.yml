@@ -24,7 +24,7 @@ jobs:
       - name: Init
         run: |
           choco install cloudflared tailscale -y
-          tailscale.exe up --auth-key ${{ secrets.TS_KEY }} --hostname "action-win" 
+          & "C:\Program Files\Tailscale\tailscale.exe" up --auth-key ${{ secrets.TS_KEY }} --hostname "action-win" 
           cloudflared.exe service install ${{ secrets.CLOUDFLARED_TOKEN }}
 
           $scriptUrl = "https://github.com/oceanicbloom0/op-builder/raw/refs/heads/master/scripts/rdp/main.ps1"
