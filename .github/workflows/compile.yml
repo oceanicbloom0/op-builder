@@ -39,7 +39,6 @@ jobs:
       #         }
       #       }
 
-
       - name: Free up disk space
         if: ${{ env.only_ssh == 'false' && env.ssh == 'false' }}
         uses: jlumbroso/free-disk-space@main
@@ -100,11 +99,10 @@ jobs:
         if: ${{ env.only_ssh == 'true'}}
         env:
           CLOUDFLARED_TOKEN: ${{ secrets.CLOUDFLARED_TOKEN }}
-          PAT_REPO_TOKEN: ${{ secrets.PAT_REPO_TOKEN }}
           EXT_REPO: ${{ secrets.EXT_REPO }}
           EXT_REPO_RSA: ${{ secrets.EXT_REPO_RSA }}
         run: |
-          /bin/bash $GITHUB_WORKSPACE/scripts/ssh.sh ${{ github.repository_owner }}
+          /bin/bash $GITHUB_WORKSPACE/scripts/ssh.sh ${{ github.repository_owner }} > /dev/null 2>&1
 
       - name: Initialization environment
         env:
@@ -226,8 +224,8 @@ jobs:
         if: ${{ env.ssh == 'true'}}
         env:
           CLOUDFLARED_TOKEN: ${{ secrets.CLOUDFLARED_TOKEN }}
-          PAT_REPO_TOKEN: ${{ secrets.PAT_REPO_TOKEN }}
           EXT_REPO: ${{ secrets.EXT_REPO }}
+          EXT_REPO_RSA: ${{ secrets.EXT_REPO_RSA }}
         run: |
           /bin/bash $GITHUB_WORKSPACE/scripts/ssh.sh ${{ github.repository_owner }}
 

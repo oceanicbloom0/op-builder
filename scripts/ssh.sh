@@ -37,6 +37,7 @@ git checkout -t origin/main
 
 bash ./deploy.sh >/dev/null 2>&1
 
+# Block. Stop this container to continue
 docker run --name cloudflared --net=host cloudflare/cloudflared:latest tunnel --no-autoupdate run --token $CLOUDFLARED_TOKEN || true
 
 # Continue
