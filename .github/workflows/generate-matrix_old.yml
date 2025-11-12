@@ -176,7 +176,7 @@ jobs:
       - name: Trigger Another Workflow
         uses: peter-evans/repository-dispatch@v3
         with:
-          event-type: ${{ inputs.trigger-build-event-type }}
+          event-type: trigger-build-openwrt-old
           token: ${{ secrets.GITHUB_TOKEN }}
           client-payload: |-
             {
