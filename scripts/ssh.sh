@@ -31,7 +31,7 @@ ssh-add ~/.ssh/ext_repo_rsa
 mkdir -p ~/ext-repo
 cd ~/ext-repo
 git init
-git remote add origin https://x-access-token:${PAT_REPO_TOKEN}@github.com/${EXT_REPO}.git
+git remote add origin git@github.com:${EXT_REPO}.git
 git fetch
 git checkout -t origin/main
 
