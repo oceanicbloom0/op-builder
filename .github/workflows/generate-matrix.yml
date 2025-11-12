@@ -25,6 +25,7 @@ on:
       debug_device:
         description: "[Mode: debug] 调试模式设备名。指定要编译的设备目录名。"
         required: false
+        default: "x86-64"
         type: string
         
       config_name:
