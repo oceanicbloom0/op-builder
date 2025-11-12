@@ -2,6 +2,9 @@
 set -e
 set -uo pipefail
 
+# 启用调试模式（临时）
+set -x
+
 # 参数检查
 if [ -z "$1" ]; then
     echo "❌ 缺少 OWNER 参数"
@@ -11,7 +14,8 @@ fi
 OWNER="$1"
 
 # 安装 starship
-curl -fsSLO https://starship.rs/install.sh && ARCH= sh ./install.sh --yes
+curl -fsSLO https://starship.rs/install.sh
+ARCH= sh ./install.sh --yes
 rm ./install.sh
 echo 'eval "$(starship init bash)"' >>/home/runner/.bashrc
 echo 'eval "$(starship init bash)"' | sudo tee /root/.bashrc
