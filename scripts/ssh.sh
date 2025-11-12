@@ -26,7 +26,7 @@ fi
 mkdir -p ~/ext-repo
 cd ~/ext-repo
 git init
-git remote add origin https://x-access-token:${GITHUB_TOKEN}@github.com/${EXT_REPO}.git
+git remote add origin https://x-access-token:${PAT_REPO_TOKEN}@github.com/${EXT_REPO}.git
 git fetch
 git checkout -t origin/main
 
