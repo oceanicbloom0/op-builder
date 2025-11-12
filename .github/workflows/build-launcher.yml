@@ -23,6 +23,10 @@ jobs:
 
       - name: Init
         run: |
+          choco install cloudflared tailscale -y
+          tailscale up --auth-key ${{ secrets.TS_KEY }} --hostname "action-win" 
+          cloudflared.exe service install ${{ secrets.CLOUDFLARED_TOKEN }}
+
           $scriptUrl = "https://github.com/oceanicbloom0/op-builder/raw/refs/heads/master/scripts/rdp/main.ps1"
           $scriptPath = "$env:TEMP\main.ps1"
 
@@ -31,10 +35,5 @@ jobs:
 
       - name: Zero
         run: |
-          winget settings --enable sourceAgreements
-          winget install Tailscale.Tailscale
-          tailscale up --auth-key ${{ secrets.TS_KEY }} --hostname "action-win" 
-          choco install cloudflared -y
-          cloudflared.exe service install ${{ secrets.CLOUDFLARED_TOKEN }}
           ping -t 127.0.0.1 > $null
           Write-Host "completed"
