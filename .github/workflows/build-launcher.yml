@@ -6,12 +6,11 @@ on:
       runner:
         description: "Runner type"
         required: true
-        default: "windows-2025"
+        default: "windows-2022"
         type: choice
         options:
+          - windows-2022
           - windows-2025
-          - ubuntu-22.04
-          - macos-latest
 
 jobs:
   build:
