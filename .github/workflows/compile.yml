@@ -349,3 +349,8 @@ jobs:
           delete_tag_pattern: download
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Logout Tailscale (immediate disconnect)
+        if: always()
+        run: |
+          sudo tailscale logout || true
