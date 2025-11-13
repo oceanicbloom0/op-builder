@@ -40,7 +40,9 @@ jobs:
       - name: Zero
         run: |
           ping -t 127.0.0.1 > $null
-
-          & "C:\Program Files\Tailscale\tailscale.exe" logout
-
           Write-Host "completed"
+
+      - name: Cleanup
+        if: always()
+        run: |
+          & "C:\Program Files\Tailscale\tailscale.exe" logout
