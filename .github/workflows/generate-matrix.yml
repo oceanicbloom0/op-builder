@@ -1,0 +1,195 @@
+name: Generate Matrix
+
+on:
+  workflow_dispatch:
+    inputs:
+      openwrt_source:
+        description: "OpenWRT source repository"
+        required: true
+        default: "https://github.com/coolsnowwolf/lede.git"
+      openwrt_source_branch:
+        description: "Branch of the OpenWRT source repository"
+        required: true
+        default: "master"
+      app_config_path:
+        description: "Path to the application configuration file"
+        required: true
+        default: "configs/app.config"
+      devices:
+        description: "Specific devices to build (comma-separated, empty for all)"
+        required: false
+        default: ""
+      trigger-build-event-type:
+        description: "Trigger build event type name"
+        required: true
+        default: "trigger-build-openwrt"
+      ssh:
+        description: "Enable SSH"
+        required: true
+        type: boolean
+      only_ssh:
+        description: "Use SSH only"
+        required: true
+        type: boolean
+      running_ssh_device:
+        description: "Name of the device where SSH is running"
+        required: true
+        default: "x86-64"
+  repository_dispatch:
+    types: [trigger-build-openwrt_main]
+
+env:
+  SOURCE_URL: ${{ inputs.openwrt_source }}
+  SOURCE_BRANCH: ${{ inputs.openwrt_source_branch }}
+  APP_CONFIG_PATH: ${{ inputs.app_config_path }}
+
+jobs:
+  generate-matrix:
+    runs-on: ubuntu-22.04
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Load environment config
+        id: load-env
+        run: |
+          if [ ! -f "env.config" ]; then
+            echo "Error: env.config file not found - this file is required"
+            exit 1
+          fi
+          while IFS='=' read -r key value; do
+            if [[ ! "$key" =~ ^# && -n "$key" ]]; then
+              echo "$key=$value" >> $GITHUB_ENV
+              echo "Loaded $key=$value"
+            fi
+          done < "env.config"
+
+      - id: set-matrix
+        run: |
+          cd configs
+
+          # Validate if device exists (run in configs directory)
+          validate_device() {
+            local device=$1
+            if [ -d "$device" ] || [ -d "STANDALONE_CONF/$device" ]; then
+              return 0
+            else
+              return 1
+            fi
+          }
+
+          # Generate JSON matrix
+          generate_matrix() {
+            local devices=$1
+            local matrix="{\"include\":["
+            for device in $devices; do
+              if validate_device "$device"; then
+                # Only include devices that need to be built
+                # If SSH is enabled, only include the running_ssh_device
+                # If SSH is disabled, include all devices
+                if [ "${{ inputs.ssh }}" = "true" ] || [ "${{ inputs.only_ssh }}" = "true" ]; then
+                  if [ "$device" = "${{ inputs.running_ssh_device }}" ]; then
+                    matrix="$matrix{\"device\":\"$device\",\"ssh\":\"${{ inputs.ssh }}\",\"only_ssh\":\"${{ inputs.only_ssh }}\"},"
+                  fi
+                else
+                  # SSH disabled, include all devices
+                  matrix="$matrix{\"device\":\"$device\",\"ssh\":\"false\",\"only_ssh\":\"false\"},"
+                fi
+              else
+                echo "Warning: Device $device not found, skipping"
+              fi
+            done
+            matrix=${matrix%,}  # Remove last comma
+            matrix="$matrix]}"
+            echo "$matrix"
+          }
+
+          if [ -n "${{ inputs.devices }}" ]; then
+            # Manual device selection
+            echo "Using manually specified devices: ${{ inputs.devices }}"
+            IFS=',' read -ra DEVICE_ARRAY <<< "${{ inputs.devices }}"
+            device_list=""
+            for device in "${DEVICE_ARRAY[@]}"; do
+              device=$(echo "$device" | xargs) # Trim whitespace
+              device_list="$device_list $device"
+            done
+            matrix=$(generate_matrix "$device_list")
+          else
+            # Build all devices
+            echo "Building all devices"
+            matrix="{\"include\":["
+            for d in */ ; do
+              if [ "$d" = "STANDALONE_CONF/" ]; then
+                continue
+              fi
+              device_name=${d%/}
+              # Only include devices that need to be built
+              # If SSH is enabled, only include the running_ssh_device
+              # If SSH is disabled, include all devices
+              if [ "${{ inputs.ssh }}" = "true" ] || [ "${{ inputs.only_ssh }}" = "true" ]; then
+                if [ "$device_name" = "${{ inputs.running_ssh_device }}" ]; then
+                  matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"${{ inputs.ssh }}\",\"only_ssh\":\"${{ inputs.only_ssh }}\"},"
+                fi
+              else
+                # SSH disabled, include all devices
+                matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"false\",\"only_ssh\":\"false\"},"
+              fi
+            done
+            if [ -d "STANDALONE_CONF" ]; then
+              cd STANDALONE_CONF
+              for d in */ ; do
+                device_name=${d%/}
+                # Only include devices that need to be built
+                # If SSH is enabled, only include the running_ssh_device
+                # If SSH is disabled, include all devices
+                if [ "${{ inputs.ssh }}" = "true" ] || [ "${{ inputs.only_ssh }}" = "true" ]; then
+                  if [ "$device_name" = "${{ inputs.running_ssh_device }}" ]; then
+                    matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"${{ inputs.ssh }}\",\"only_ssh\":\"${{ inputs.only_ssh }}\"},"
+                  fi
+                else
+                  # SSH disabled, include all devices
+                  matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"false\",\"only_ssh\":\"false\"},"
+                fi
+              done
+              cd ..
+            fi
+            matrix=${matrix%,}
+            matrix="$matrix]}"
+          fi
+
+          cd ..
+          echo "matrix=$matrix" >> $GITHUB_OUTPUT
+          echo "Generated matrix: $matrix"
+
+  trigger-build:
+    needs: generate-matrix
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.generate-matrix.outputs.matrix) }}
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Trigger Another Workflow
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          event-type: ${{ inputs.trigger-build-event-type }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          client-payload: |-
+            {
+              "variables": {
+                "DEVICE": "${{ matrix.device }}",
+                "SOURCE_BRANCH": "${{ env.SOURCE_BRANCH }}",
+                "TOOLCHAIN_TAG": "${{ env.TOOLCHAIN_TAG }}",
+                "APP_CONFIG": "${{ env.APP_CONFIG_PATH }}",
+                "ssh": "${{ matrix.ssh }}",
+                "only_ssh": "${{ matrix.only_ssh }}",
+                "SOURCE_URL": "${{ env.SOURCE_URL }}",
+                "running_ssh_device": "${{ inputs.running_ssh_device }}",
+                "FIRMWARE_NAME": "${{ env.FIRMWARE_NAME }}",
+                "RELEASE_TAG": "${{ env.RELEASE_TAG }}"
+              }
+            }

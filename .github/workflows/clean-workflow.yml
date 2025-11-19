@@ -1,0 +1,26 @@
+name: Clean Workflow
+on:
+  # push:
+  workflow_dispatch:
+    inputs:
+      ready:
+        description: "Set true to run"
+        required: false
+        default: "true"
+
+jobs:
+  cleaner:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: otto-de/purge-deprecated-workflow-runs@v2
+        with:
+          remove-failed: true
+          remove-cancelled: true
+          remove-skipped: true
+
+      - name: Delete workflow runs
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          retain_days: 0
+          keep_minimum_runs: 0

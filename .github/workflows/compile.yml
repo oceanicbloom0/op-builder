@@ -1,0 +1,347 @@
+name: Compile
+
+on:
+  repository_dispatch:
+    types: [trigger-build-openwrt]
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+      actions: write
+    strategy:
+      fail-fast: false
+    env:
+      DEVICE: ${{ github.event.client_payload.variables.DEVICE}}
+      SOURCE_BRANCH: ${{github.event.client_payload.variables.SOURCE_BRANCH}}
+      APP_CONFIG: ${{github.event.client_payload.variables.APP_CONFIG}}
+      ssh: ${{github.event.client_payload.variables.ssh}}
+      only_ssh: ${{github.event.client_payload.variables.only_ssh}}
+      SOURCE_URL: ${{github.event.client_payload.variables.SOURCE_URL}}
+      running_ssh_device: ${{ github.event.client_payload.variables.running_ssh_device }}
+
+    steps:
+      - name: Record Start Time
+        id: start
+        run: echo "time=$(date +%s)" >> $GITHUB_ENV
+
+      # - name: Trigger Another Workflow
+      #   uses: peter-evans/repository-dispatch@v3
+      #   if: ${{ env.RUNNER_PASS == 'false' }}
+      #   with:
+      #     event-type: trigger-build-openwrt
+      #     token: ${{ secrets.GITHUB_TOKEN }}
+      #     client-payload: |-
+      #       {
+      #         "variables": {
+      #         }
+      #       }
+
+
+      - name: Free up disk space
+        if: ${{ env.only_ssh == 'false' && env.ssh == 'false' }}
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          docker-images: false
+
+      - name: Combination disk
+        continue-on-error: true
+        run: |
+          export ROOT_FREE_KB=$(df --block-size=1024 --output=avail / | tail -1)
+          export ROOT_LOOP_KB=$(expr $ROOT_FREE_KB - 1048576)
+          export ROOT_LOOP_BYTES=$(expr $ROOT_LOOP_KB \* 1024)
+          sudo fallocate -l $ROOT_LOOP_BYTES /root.img
+          export ROOT_LOOP_DEVNAME=$(sudo losetup -Pf --show /root.img)
+          sudo pvcreate -f $ROOT_LOOP_DEVNAME
+          export MNT_FREE_KB=$(df --block-size=1024 --output=avail /mnt | tail -1)
+          export MNT_LOOP_KB=$(expr $MNT_FREE_KB - 102400)
+          export MNT_LOOP_BYTES=$(expr $MNT_LOOP_KB \* 1024)
+          sudo fallocate -l $MNT_LOOP_BYTES /mnt/mnt.img
+          export MNT_LOOP_DEVNAME=$(sudo losetup -Pf --show /mnt/mnt.img)
+          sudo pvcreate -f $MNT_LOOP_DEVNAME
+          sudo vgcreate vgstorage $ROOT_LOOP_DEVNAME $MNT_LOOP_DEVNAME
+          sudo lvcreate -n lvstorage -l 100%FREE vgstorage
+          export LV_DEVNAME=$(sudo lvscan | awk -F "'" '{print $2}')
+          sudo mkfs.btrfs -L combinedisk $LV_DEVNAME
+          sudo mount -o compress=zstd $LV_DEVNAME $GITHUB_WORKSPACE
+          sudo chown -R runner:runner $GITHUB_WORKSPACE
+          mkdir -p $GITHUB_WORKSPACE/tmp && chmod 777 $GITHUB_WORKSPACE/tmp
+          sudo cp -rp /tmp/* $GITHUB_WORKSPACE/tmp
+          sudo mount -B $GITHUB_WORKSPACE/tmp /tmp && df -hT
+
+          # 这里挂载会影响到$GITHUB_WORKSPACE，不要在后续步骤挂载，最好在编译步骤开启就运行~
+
+      - name: Checkout
+        run: |
+          cd $GITHUB_WORKSPACE
+          git init
+          git remote add origin https://github.com/$GITHUB_REPOSITORY
+          git fetch
+          git checkout -t origin/${{ github.ref_name }}
+
+      - name: Load environment config
+        id: load-env
+        run: |
+          if [ ! -f "env.config" ]; then
+            echo "Error: env.config file not found - this file is required"
+            exit 1
+          fi
+          while IFS='=' read -r key value; do
+            if [[ ! "$key" =~ ^# && -n "$key" ]]; then
+              echo "$key=$value" >> $GITHUB_ENV
+              echo "Loaded $key=$value"
+            fi
+          done < "env.config"
+
+      - name: SSH
+        if: ${{ env.only_ssh == 'true'}}
+        env:
+          CLOUDFLARED_TOKEN: ${{ secrets.CLOUDFLARED_TOKEN }}
+          PAT_REPO_TOKEN: ${{ secrets.PAT_REPO_TOKEN }}
+          EXT_REPO: ${{ secrets.EXT_REPO }}
+        run: |
+          /bin/bash $GITHUB_WORKSPACE/scripts/ssh.sh ${{ github.repository_owner }} > /dev/null 2>&1
+
+      - name: Initialization environment
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo timedatectl set-timezone "Asia/Taipei"
+
+          ulimit -u 10000 && ulimit -n 4096 && ulimit -d unlimited && ulimit -m unlimited && ulimit -s unlimited && ulimit -t unlimited && ulimit -v unlimited
+
+          sudo apt update -y
+          sudo apt install -y ack antlr3 aria2 asciidoc autoconf automake autopoint binutils bison build-essential \
+          bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib \
+          git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev \
+          libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libreadline-dev libssl-dev libtool lrzsz \
+          mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf python2.7 python3 python3-pip libpython3-dev qemu-utils \
+          rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev python3-pyelftools
+          sudo -E apt-get -qq autoremove --purge
+          sudo -E apt-get -qq clean
+
+      - name: Extract device architecture
+        id: extract-arch
+        run: |
+          # 查找设备配置文件
+          CONFIG_PATH="$GITHUB_WORKSPACE/configs/${{ env.DEVICE }}/.config"
+          STANDALONE_CONF_PATH="$GITHUB_WORKSPACE/configs/STANDALONE_CONF/${{ env.DEVICE }}/.config"
+
+          if [ -f "$CONFIG_PATH" ]; then
+            config_file="$CONFIG_PATH"
+          elif [ -f "$STANDALONE_CONF_PATH" ]; then
+            config_file="$STANDALONE_CONF_PATH"
+          else
+            echo "Error: .config file not found for DEVICE=${{ env.DEVICE }}"
+            exit 1
+          fi
+
+          # 提取架构信息
+          target=$(grep "^CONFIG_TARGET_[^=]*=y" "$config_file" | grep -v "_DEVICE_" | grep -v "_ROOTFS_" | head -1 | sed 's/CONFIG_TARGET_//; s/=y//')
+          if [ -n "$target" ]; then
+            subtarget=$(grep "^CONFIG_TARGET_${target}_[^=]*=y" "$config_file" | grep -v "_DEVICE_" | grep -v "_ROOTFS_" | head -1 | sed "s/CONFIG_TARGET_${target}_//; s/=y//")
+            arch="${target}_${subtarget}"
+            echo "ARCH=$arch" >> $GITHUB_ENV
+            echo "ARCH=$arch" >> $GITHUB_OUTPUT
+          else
+            echo "Error: Could not extract architecture from config file"
+            exit 1
+          fi
+
+      - name: Mount toolchain
+        run: |
+          # Set SOURCE_REPO
+          export SOURCE_REPO="$(basename ${{ env.SOURCE_URL }} .git)"
+
+          for i in {0..9}
+          do
+            echo downloading..
+            curl -fsL -k https://github.com/$GITHUB_REPOSITORY/releases/download/$TOOLCHAIN_TAG/toolchain-$SOURCE_REPO-$SOURCE_BRANCH-$ARCH.img.0$i >> toolchain-$SOURCE_REPO-$SOURCE_BRANCH-$ARCH.img || break
+          done
+          mkdir -p openwrt-ro openwrt workdir overlay
+          sudo mount -o loop toolchain-$SOURCE_REPO-$SOURCE_BRANCH-$ARCH.img openwrt-ro
+          sudo mount -t overlay overlay -o lowerdir=openwrt-ro,upperdir=overlay,workdir=workdir openwrt
+          echo $GITHUB_WORKSPACE
+
+          # Set OPENWRT_PATH in GITHUB_ENV
+          cd openwrt && echo "OPENWRT_PATH=$PWD" >> $GITHUB_ENV
+          git pull
+
+      - name: Add packages
+        run: |
+          cd $OPENWRT_PATH
+
+          chmod +x $GITHUB_WORKSPACE/scripts/openwrt/add-package.sh
+          $GITHUB_WORKSPACE/scripts/openwrt/add-package.sh
+
+          git pull
+
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Update configuration
+        run: |
+          cd $OPENWRT_PATH
+
+          bash $GITHUB_WORKSPACE/scripts/openwrt/copy-config.sh
+          bash $GITHUB_WORKSPACE/scripts/openwrt/patch_config.sh
+
+          # 运行 defconfig 应用更改
+          make defconfig
+
+      - name: Upload .config
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: .config-${{ env.DEVICE }}
+          path: ${{ env.OPENWRT_PATH }}/.config
+
+      - name: Output the plugin list
+        run: |
+          cd $OPENWRT_PATH
+          bash $GITHUB_WORKSPACE/scripts/openwrt/list-packages.sh
+
+      - name: Make download
+        run: |
+          cd $OPENWRT_PATH
+          make download -j8
+
+      - name: Replace source code files
+        run: |
+          cd $OPENWRT_PATH
+
+          if [ -n "$(ls -A "$GITHUB_WORKSPACE/files" 2>/dev/null)" ]; then
+           cp -Rf $GITHUB_WORKSPACE/files/* ./
+          fi
+
+      - name: SSH
+        if: ${{ env.ssh == 'true'}}
+        env:
+          CLOUDFLARED_TOKEN: ${{ secrets.CLOUDFLARED_TOKEN }}
+          PAT_REPO_TOKEN: ${{ secrets.PAT_REPO_TOKEN }}
+          EXT_REPO: ${{ secrets.EXT_REPO }}
+        run: |
+          /bin/bash $GITHUB_WORKSPACE/scripts/ssh.sh ${{ github.repository_owner }} > /dev/null 2>&1
+
+      - name: Defconfig
+        if: always()
+        run: |
+          cd $OPENWRT_PATH
+          ./scripts/diffconfig.sh > defconfig
+
+      - name: Upload defconfig
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: defconfig-${{ env.DEVICE }}
+          path: ${{ env.OPENWRT_PATH }}/defconfig
+
+      - name: Compile Packages
+        id: compile
+        run: |
+          cd $OPENWRT_PATH
+          echo -e "$(nproc) thread compile"
+          make diffconfig
+          make target/compile -j$(nproc) IGNORE_ERRORS="m n" BUILD_LOG=1 || \
+          yes n | make target/compile -j1 V=s IGNORE_ERRORS=1
+          make package/compile -j$(nproc) IGNORE_ERRORS=1 || make package/compile -j1 V=s IGNORE_ERRORS=1
+          make package/index
+
+      - name: Generate firmware
+        id: generate
+        run: |
+          cd $OPENWRT_PATH
+          mkdir -p files/etc/uci-defaults
+          envsubst < $GITHUB_WORKSPACE/scripts/openwrt/init-settings.sh.template > files/etc/uci-defaults/99-init-settings
+          make package/install -j$(nproc)  || make package/install -j1 V=s
+          make target/install -j$(nproc)  || make target/install -j1 V=s
+          echo "status=success" >> $GITHUB_OUTPUT
+          make json_overview_image_info
+          make checksum
+
+      - name: Organize files
+        run: |
+          cd $OPENWRT_PATH/bin/targets/*/*
+
+          rm -rf \
+          packages \
+          sha256* \
+          *manifest \
+          *.sha \
+          *info \
+          *kernel.bin \
+          *sha \
+          *json
+
+          bash $GITHUB_WORKSPACE/scripts/openwrt/rename-bins.sh
+
+          echo "PACKAGED_OUTPUTPATH=$PWD" >> $GITHUB_ENV
+
+      - name: Package Armvirt as OpenWrt
+        if: ${{env.DEVICE=='n1'}}
+        uses: ophub/flippy-openwrt-actions@main
+        env:
+          OPENWRT_ARMVIRT: openwrt/bin/targets/*/*/*rootfs.tar.gz
+          PACKAGE_SOC: s905d
+          WHOAMI: ${{ env.FIRMWARE_NAME }}
+
+      - name: Generate variables
+        run: |
+          cd $OPENWRT_PATH
+
+          echo "DATE=$(date +'%Y.%m.%d')" >> $GITHUB_ENV
+          # echo "release_tag=${{ github.ref_name }}-$(date +'%Y.%m.%d')-download" >> $GITHUB_ENV
+          # echo "DEVICES=$(echo '${{ needs.generate-matrix.outputs.matrix }}' | jq -r '.include[].device' | tr '\n' ' ')" >> $GITHUB_ENV
+          echo "BIN_PATH=openwrt/${{ env.DEVICE }}/${{ github.ref_name }}" >> $GITHUB_ENV
+
+          # Calculate and Save Duration
+          end_time=$(date +%s)
+          duration=$((end_time - ${{ env.time }}))
+          minutes=$((duration / 60))
+          seconds=$((duration % 60))
+          echo "build_duration=${minutes} minutes and ${seconds} seconds" >> $GITHUB_ENV
+
+      - name: Generate release-text
+        run: |
+          cat <<EOF >> release-text
+          > ### Build Info (Last Build)
+          > The build took ${build_duration}.
+          EOF
+
+      - name: Upload firmware to release
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          name: "${{ env.FIRMWARE_NAME }} | ${{ env.DEVICE }}"
+          tag_name: "${{ env.RELEASE_TAG }}-${{ env.DEVICE }}"
+          body_path: ${{ github.workspace }}/release-text
+          files: ${{ env.PACKAGED_OUTPUTPATH }}/*
+
+      # - name: TG Notification - ✔️
+      #   if: ${{ success() }}
+      #   continue-on-error: true
+      #   uses: appleboy/telegram-action@master
+      #   with:
+      #     to: ${{ secrets.TELEGRAM_CHANNEL_CHAT_ID }}
+      #     token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      #     message: |
+      #       The ${{ env.DEVICE }} firmware has been compiled and took ${{ env.build_duration }}.
+      #
+      #       Download：https://github.com/${{ github.repository }}/releases/tag/${{ env.release_tag }}
+
+      - uses: otto-de/purge-deprecated-workflow-runs@v2
+        with:
+          remove-failed: true
+          remove-cancelled: true
+          remove-skipped: true
+
+      - name: Delete Older Releases
+        uses: dev-drprasad/delete-older-releases@v0.3.4
+        with:
+          keep_latest: 7
+          delete_tag_pattern: download
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
