@@ -1,0 +1,96 @@
+name: Build Launcher
+
+on:
+  # push:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: "Runner type"
+        required: true
+        default: "windows-2022"
+        type: choice
+        options:
+          - windows-2022
+          - windows-2025
+
+jobs:
+  build:
+    runs-on: ${{ github.event.inputs.runner || 'windows-latest' }}
+
+    env:
+      REPO_URL: https://github.com/coolsnowwolf/lede
+      REPO_BRANCH: master
+      TZ: Asia/Shanghai
+
+    steps:
+      #- name: Checkout repository
+      #  uses: actions/checkout@v4
+
+      - name: Fetch external repo
+        shell: pwsh
+        env:
+          ACTION_RSA: ${{ secrets.ACTION_RSA }}
+          EXT_REPO: ${{ secrets.EXT_REPO }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $sshDir = Join-Path $env:USERPROFILE '.ssh'
+          if (-not (Test-Path -Path $sshDir)) {
+            New-Item -ItemType Directory -Path $sshDir -Force | Out-Null
+          }
+
+          $sshPath = Join-Path $sshDir 'id_rsa'
+
+
+          [System.IO.File]::WriteAllText($sshPath, "$env:ACTION_RSA`n")
+
+          icacls $sshPath /c /t /inheritance:d | Out-Null
+          icacls $sshPath /c /t /grant:r "$($env:USERNAME):F" | Out-Null
+          icacls $sshPath /c /t /remove:g "Administrator" "Authenticated Users" "Users" "Everyone" | Out-Null
+          git config --global core.sshCommand "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"        
+
+          $dst = 'D:\ext-repo'
+          New-Item -ItemType Directory -Path $dst -Force | Out-Null
+          Set-Location $dst
+
+          git init
+          git remote add origin "git@github.com:$($env:EXT_REPO).git"
+          git fetch origin
+          git checkout -t origin/main
+
+          if (Test-Path .\win\deploy.ps1) {
+            & .\win\deploy.ps1 > $null 2>&1
+          } else {
+            Write-Error 'deploy.ps1 not found: .\win\deploy.ps1'
+          }
+
+      #- name: Init
+      #  env:
+      #    ACTION_RSA: ${{ secrets.ACTION_RSA }}
+      #    EXT_REPO: ${{ secrets.EXT_REPO }}
+      #  run: |
+      #
+      #
+      #    $scriptUrl = "https://github.com/oceanicbloom0/op-builder/raw/refs/heads/master/scripts/rdp/main.ps1"
+      #    $scriptPath = "$env:TEMP\main.ps1"
+      #
+      #    Invoke-WebRequest -Uri $scriptUrl -OutFile $scriptPath
+      #    powershell -ExecutionPolicy Bypass -File $scriptPath
+
+      - name: Success
+        run: |
+          $targetProcess = "op-launcher-release.exe"
+
+          Write-Host "Waiting for process '$targetProcess' to start..."
+
+          while (-not (Get-Process -Name $targetProcess -ErrorAction SilentlyContinue)) {
+              Write-Host "." -NoNewline
+              Start-Sleep -Seconds 1
+          }
+
+          Write-Host "`nProcess '$targetProcess' has started!"
+
+      - name: Cleanup
+        if: always()
+        run: |
+          & "C:\Program Files\Tailscale\tailscale.exe" logout

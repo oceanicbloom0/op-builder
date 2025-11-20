@@ -1,0 +1,52 @@
+name: Run WebUI
+
+on:
+  workflow_dispatch:
+    inputs:
+      rootfs_url:
+        description: "*x86-64-generic-rootfs.tar.gz URL"
+        required: true
+        default: ""
+
+jobs:
+  build_and_run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install jq
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+
+      - name: Determine Firmware URL
+        id: determine_url
+        run: |
+          FIRMWARE_URL="${{ github.event.inputs.rootfs_url }}"
+          echo "FIRMWARE_URL=$FIRMWARE_URL" >> $GITHUB_ENV
+
+      - name: Download Firmware
+        run: |
+          curl -L "$FIRMWARE_URL" --output firmware.tar.gz
+
+      - name: Generate Dockerfile
+        run: |
+          cat << 'EOF' > Dockerfile
+          FROM scratch
+          LABEL maintainer=action
+          ARG FIRMWARE
+          ADD ${FIRMWARE} /
+          EXPOSE 80
+          # USER root
+          CMD ["/sbin/init"]
+          EOF
+          sed -i 's/^[ \t]*//' Dockerfile
+
+      - name: Build Docker Image
+        run: |
+          docker build --build-arg FIRMWARE=firmware.tar.gz -t firmware:latest .
+
+      - name: Run Docker Container
+        run: |
+          docker run -d --hostname OpenWrt --name firmware_container -p 80:80 firmware:latest
+          docker run --net=host cloudflare/cloudflared:latest tunnel --no-autoupdate run --token ${{ secrets.CLOUDFLARED_TOKEN_OPENWRT_WEB }} > /dev/null 2>&1

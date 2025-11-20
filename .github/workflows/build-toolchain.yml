@@ -1,0 +1,280 @@
+name: Build Toolchain
+
+on:
+  schedule:
+    - cron: "0 15 * * *"
+  workflow_dispatch:
+
+jobs:
+  generate-matrices:
+    runs-on: ubuntu-22.04
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install jq
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y jq
+          sudo apt-get clean
+
+      - id: set-matrix
+        run: |
+          # 记录根目录
+          ROOT_DIR=$(pwd)
+
+          # 检查 toolchain-config.json 是否存在
+          if [ ! -f "$ROOT_DIR/toolchain-config.json" ]; then
+            echo "Error: toolchain-config.json not found in $ROOT_DIR"
+            exit 1
+          fi
+
+          # 进入 configs 目录
+          cd configs
+
+          # 获取所有设备的架构信息
+          declare -A arch_map
+          arch_list=()
+
+          # 处理主配置目录
+          for device_dir in */; do
+            if [ "$device_dir" != "STANDALONE_CONF/" ] && [ -f "$device_dir/.config" ]; then
+              device="${device_dir%/}"
+              # 提取架构信息
+              target=$(grep "^CONFIG_TARGET_[^=]*=y" "$device_dir/.config" | grep -v "_DEVICE_" | grep -v "_ROOTFS_" | head -1 | sed 's/CONFIG_TARGET_//; s/=y//')
+              if [ -n "$target" ]; then
+                subtarget=$(grep "^CONFIG_TARGET_${target}_[^=]*=y" "$device_dir/.config" | grep -v "_DEVICE_" | grep -v "_ROOTFS_" | head -1 | sed "s/CONFIG_TARGET_${target}_//; s/=y//")
+                if [ -n "$subtarget" ]; then
+                  arch="${target}_${subtarget}"
+                  arch_map["$arch"]="$device"  # 存储第一个设备作为代表
+                  arch_list+=("$arch")
+                  echo "提取架构: $device -> $arch"
+                else
+                  echo "警告: 无法提取 $device 的子目标架构"
+                fi
+              else
+                echo "警告: 无法提取 $device 的目标架构"
+              fi
+            fi
+          done
+
+          # 处理 STANDALONE_CONF 目录（如果存在）
+          if [ -d "STANDALONE_CONF" ]; then
+            cd STANDALONE_CONF
+            for device_dir in */; do
+              if [ -f "$device_dir/.config" ]; then
+                device="${device_dir%/}"
+                # 提取架构信息
+                target=$(grep "^CONFIG_TARGET_[^=]*=y" "$device_dir/.config" | grep -v "_DEVICE_" | grep -v "_ROOTFS_" | head -1 | sed 's/CONFIG_TARGET_//; s/=y//')
+                if [ -n "$target" ]; then
+                  subtarget=$(grep "^CONFIG_TARGET_${target}_[^=]*=y" "$device_dir/.config" | grep -v "_DEVICE_" | grep -v "_ROOTFS_" | head -1 | sed "s/CONFIG_TARGET_${target}_//; s/=y//")
+                  if [ -n "$subtarget" ]; then
+                    arch="${target}_${subtarget}"
+                    if [ -z "${arch_map[$arch]}" ]; then
+                      arch_map["$arch"]="$device"  # 只存储第一个设备作为代表
+                    fi
+                    arch_list+=("$arch")
+                    echo "提取架构: $device -> $arch"
+                  else
+                    echo "警告: 无法提取 $device 的子目标架构"
+                  fi
+                else
+                  echo "警告: 无法提取 $device 的目标架构"
+                fi
+              fi
+            done
+            cd ..  # 返回到 configs 目录
+          fi
+
+          # 返回到根目录
+          cd "$ROOT_DIR"
+
+          # 去重架构列表
+          unique_archs=($(printf '%s\n' "${arch_list[@]}" | sort -u))
+
+          # 检查是否有有效的架构
+          if [ ${#unique_archs[@]} -eq 0 ]; then
+            echo "错误: 没有找到有效的CPU架构"
+            exit 1
+          fi
+
+          # 将架构数组转换为 JSON
+          archs_json=$(printf '%s\n' "${unique_archs[@]}" | jq -R . | jq -s .)
+
+          # 生成矩阵 JSON
+          matrix_json=$(jq -c -n --argjson configs "$(cat "$ROOT_DIR/toolchain-config.json")" --argjson archs "$archs_json" '
+            $configs | map(. as $c | $archs | map({
+              repository: $c.openwrt_source,
+              branch: $c.openwrt_source_branch,
+              tag: $c.TOOLCHAIN_TAG,
+              arch: .
+            })) | add | { include: . }
+          ')
+
+          # 检查矩阵是否为空
+          if [ -z "$matrix_json" ] || [ "$matrix_json" = "null" ]; then
+            echo "错误: 生成的矩阵为空"
+            exit 1
+          fi
+
+          # 调试输出
+          echo "原始架构列表:"
+          printf "%s\n" "${arch_list[@]}"
+          echo "去重后架构列表:"
+          printf "%s\n" "${unique_archs[@]}"
+          echo "matrix_json starts with: ${matrix_json:0:100}"
+          echo "matrix=$matrix_json" >> $GITHUB_OUTPUT
+          echo "$matrix_json"
+
+  build-toolchain:
+    needs: generate-matrices
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.generate-matrices.outputs.matrix) }}
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+      actions: write
+    env:
+      ARCH: ${{ matrix.arch }}
+
+    steps:
+      - name: Combination disk
+        continue-on-error: true
+        run: |
+          export ROOT_FREE_KB=$(df --block-size=1024 --output=avail / | tail -1)
+          export ROOT_LOOP_KB=$(expr $ROOT_FREE_KB - 1048576)
+          export ROOT_LOOP_BYTES=$(expr $ROOT_LOOP_KB \* 1024)
+          sudo fallocate -l $ROOT_LOOP_BYTES /root.img
+          export ROOT_LOOP_DEVNAME=$(sudo losetup -Pf --show /root.img)
+          sudo pvcreate -f $ROOT_LOOP_DEVNAME
+          export MNT_FREE_KB=$(df --block-size=1024 --output=avail /mnt | tail -1)
+          export MNT_LOOP_KB=$(expr $MNT_FREE_KB - 102400)
+          export MNT_LOOP_BYTES=$(expr $MNT_LOOP_KB \* 1024)
+          sudo fallocate -l $MNT_LOOP_BYTES /mnt/mnt.img
+          export MNT_LOOP_DEVNAME=$(sudo losetup -Pf --show /mnt/mnt.img)
+          sudo pvcreate -f $MNT_LOOP_DEVNAME
+          sudo vgcreate vgstorage $ROOT_LOOP_DEVNAME $MNT_LOOP_DEVNAME
+          sudo lvcreate -n lvstorage -l 100%FREE vgstorage
+          export LV_DEVNAME=$(sudo lvscan | awk -F "'" '{print $2}')
+          sudo mkfs.btrfs -L combinedisk $LV_DEVNAME
+          sudo mount -o compress=zstd $LV_DEVNAME $GITHUB_WORKSPACE
+          sudo chown -R runner:runner $GITHUB_WORKSPACE
+          mkdir -p $GITHUB_WORKSPACE/tmp && chmod 777 $GITHUB_WORKSPACE/tmp
+          sudo cp -rp /tmp/* $GITHUB_WORKSPACE/tmp
+          sudo mount -B $GITHUB_WORKSPACE/tmp /tmp && df -hT
+
+      - name: Checkout current repository
+        run: |
+          cd $GITHUB_WORKSPACE
+          git init
+          git remote add origin https://github.com/$GITHUB_REPOSITORY
+          git fetch
+          git checkout -t origin/${{ github.ref_name }}
+
+      - name: Clone code
+        id: clone
+        run: |
+          git clone ${{ matrix.repository }} -b ${{ matrix.branch }} openwrt
+          cd openwrt
+          echo "OPENWRT_PATH=$PWD" >> $GITHUB_ENV
+
+      - name: Generate variables
+        id: env
+        run: |
+          cd $OPENWRT_PATH
+          export CURRENT_BRANCH="$(git symbolic-ref --short HEAD)"
+          echo "CURRENT_BRANCH=$CURRENT_BRANCH" >> $GITHUB_ENV
+          echo "CURRENT_BRANCH=$CURRENT_BRANCH" >> $GITHUB_OUTPUT
+          export SOURCE_REPO="$(basename ${{ matrix.repository }} .git)"
+          echo "SOURCE_REPO=$SOURCE_REPO" >> $GITHUB_ENV
+          echo "SOURCE_REPO=$SOURCE_REPO" >> $GITHUB_OUTPUT
+          export DEVICE_TARGET=$(cat .config | grep CONFIG_TARGET_BOARD | awk -F '"' '{print $2}' || echo "")
+          echo "DEVICE_TARGET=$DEVICE_TARGET" >> $GITHUB_ENV
+          echo "DEVICE_TARGET=$DEVICE_TARGET" >> $GITHUB_OUTPUT
+          export DEVICE_SUBTARGET=$(cat .config | grep CONFIG_TARGET_SUBTARGET | awk -F '"' '{print $2}' || echo "")
+          echo "DEVICE_SUBTARGET=$DEVICE_SUBTARGET" >> $GITHUB_ENV
+          echo "DEVICE_SUBTARGET=$DEVICE_SUBTARGET" >> $GITHUB_OUTPUT
+          export TOOLCHAIN_IMAGE="toolchain-$SOURCE_REPO-${{ matrix.branch }}-${{ matrix.arch }}"
+          echo "TOOLCHAIN_IMAGE=$TOOLCHAIN_IMAGE" >> $GITHUB_ENV
+          echo "TOOLCHAIN_IMAGE=$TOOLCHAIN_IMAGE" >> $GITHUB_OUTPUT
+
+      - name: Compare Toolchain Hash
+        id: hash
+        run: |
+          cd $OPENWRT_PATH
+          export CURRENT_HASH=$(git log --pretty=tformat:"%H" -n1 tools toolchain)
+          echo "CURRENT_HASH=$CURRENT_HASH" >> $GITHUB_ENV
+          export CACHE_HASH=$(curl -fSsL -k https://github.com/$GITHUB_REPOSITORY/releases/download/${{ matrix.tag }}/$TOOLCHAIN_IMAGE.hash || echo "")
+          echo "CACHE_HASH=$CACHE_HASH" >> $GITHUB_ENV
+          if [ -z "$CACHE_HASH" ] || [ "$CURRENT_HASH" != "$CACHE_HASH" ]; then
+            echo "REBUILD_TOOLCHAIN=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Install compilation dependencies
+        if: steps.hash.outputs.REBUILD_TOOLCHAIN == 'true'
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo rm -rf /etc/apt/sources.list.d/*
+          sudo -E apt-get -qq update
+          sudo apt install -y ack antlr3 aria2 asciidoc autoconf automake autopoint binutils bison build-essential \
+          bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib \
+          git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev \
+          libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libreadline-dev libssl-dev libtool lrzsz \
+          mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf python2.7 python3 python3-pip libpython3-dev qemu-utils \
+          rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev python3-pyelftools
+          sudo -E apt-get -qq install aria2 clang clangd ecj lib32gcc-s1 libfuse-dev libncursesw5 \
+          libpython3-dev lld lldb python3-ply re2c
+          sudo -E apt-get -qq autoremove --purge
+          sudo -E apt-get -qq clean
+          sudo timedatectl set-timezone "Asia/Shanghai"
+
+      - name: Generate Toolchain Configuration
+        if: steps.hash.outputs.REBUILD_TOOLCHAIN == 'true'
+        run: |
+          bash $GITHUB_WORKSPACE/scripts/openwrt/generate-arch-config.sh
+          cd $OPENWRT_PATH && make defconfig > /dev/null 2>&1
+
+      - name: Install Feeds
+        if: steps.hash.outputs.REBUILD_TOOLCHAIN == 'true'
+        run: |
+          cd $OPENWRT_PATH
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Compile Tools
+        if: steps.hash.outputs.REBUILD_TOOLCHAIN == 'true'
+        run: |
+          cd $OPENWRT_PATH
+          make tools/compile -j$(nproc) || make tools/compile -j1 V=s
+
+      - name: Compile Toolchain
+        if: steps.hash.outputs.REBUILD_TOOLCHAIN == 'true'
+        run: |
+          cd $OPENWRT_PATH
+          make toolchain/compile -j$(nproc) || make toolchain/compile -j1 V=s
+          rm -rf .config* dl bin
+
+      - name: Generate Toolchain Image
+        if: steps.hash.outputs.REBUILD_TOOLCHAIN == 'true'
+        run: |
+          mksquashfs $OPENWRT_PATH $TOOLCHAIN_IMAGE -force-gid 1001 -force-uid 1001 -comp zstd
+          mkdir -p $GITHUB_WORKSPACE/output
+          split -d -b 1900M $TOOLCHAIN_IMAGE $GITHUB_WORKSPACE/output/$TOOLCHAIN_IMAGE.img.
+          rm $TOOLCHAIN_IMAGE
+          echo $CURRENT_HASH > $GITHUB_WORKSPACE/output/$TOOLCHAIN_IMAGE.hash
+
+      - name: Upload Toolchain Image to Release
+        if: steps.hash.outputs.REBUILD_TOOLCHAIN == 'true'
+        uses: ncipollo/release-action@main
+        with:
+          name: Toolchain
+          allowUpdates: true
+          replacesArtifacts: true
+          tag: ${{ matrix.tag }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          artifacts: output/*
+          body: toolchain
