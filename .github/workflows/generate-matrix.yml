@@ -187,6 +187,6 @@ jobs:
                 "ssh": "${{ matrix.ssh }}",
                 "instant_ssh": "${{ matrix.instant_ssh }}",
                 "SOURCE_URL": "${{ env.SOURCE_URL }}",
-                "running_ssh_device": "${{ inputs.running_ssh_device }}",
+                "running_ssh_device": "${{ inputs.running_ssh_device }}"
               }
             }
