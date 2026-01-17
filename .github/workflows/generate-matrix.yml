@@ -89,14 +89,16 @@ jobs:
                 # Only include devices that need to be built
                 # If SSH is enabled, only include the running_ssh_device
                 # If SSH is disabled, include all devices
+                local ssh_val="false"
+                local instant_ssh_val="false"
+                
                 if [ "${{ inputs.ssh }}" = "true" ] || [ "${{ inputs.instant_ssh }}" = "true" ]; then
                   if [ "$device" = "${{ inputs.running_ssh_device }}" ]; then
-                    matrix="$matrix{\"device\":\"$device\",\"ssh\":\"${{ inputs.ssh }}\",\"instant_ssh\":\"${{ inputs.instant_ssh }}\"},"
+                    ssh_val="${{ inputs.ssh }}"
+                    instant_ssh_val="${{ inputs.instant_ssh }}"
                   fi
-                else
-                  # SSH disabled, include all devices
-                  matrix="$matrix{\"device\":\"$device\",\"ssh\":\"false\",\"instant_ssh\":\"false\"},"
                 fi
+                matrix="$matrix{\"device\":\"$device\",\"ssh\":\"$ssh_val\",\"instant_ssh\":\"$instant_ssh_val\"},"
               else
                 echo "Warning: Device $device not found, skipping"
               fi
@@ -128,14 +130,16 @@ jobs:
               # Only include devices that need to be built
               # If SSH is enabled, only include the running_ssh_device
               # If SSH is disabled, include all devices
+              local ssh_val="false"
+              local instant_ssh_val="false"
+
               if [ "${{ inputs.ssh }}" = "true" ] || [ "${{ inputs.instant_ssh }}" = "true" ]; then
                 if [ "$device_name" = "${{ inputs.running_ssh_device }}" ]; then
-                  matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"${{ inputs.ssh }}\",\"instant_ssh\":\"${{ inputs.instant_ssh }}\"},"
+                  ssh_val="${{ inputs.ssh }}"
+                  instant_ssh_val="${{ inputs.instant_ssh }}"
                 fi
-              else
-                # SSH disabled, include all devices
-                matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"false\",\"instant_ssh\":\"false\"},"
               fi
+              matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"$ssh_val\",\"instant_ssh\":\"$instant_ssh_val\"},"
             done
             if [ -d "STANDALONE_CONF" ]; then
               cd STANDALONE_CONF
@@ -144,14 +148,16 @@ jobs:
                 # Only include devices that need to be built
                 # If SSH is enabled, only include the running_ssh_device
                 # If SSH is disabled, include all devices
-                if [ "${{ inputs.ssh }}" = "true" ] || [ "${{ inputs.instant_ssh }}" = "true" ]; then
-                  if [ "$device_name" = "${{ inputs.running_ssh_device }}" ]; then
-                    matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"${{ inputs.ssh }}\",\"instant_ssh\":\"${{ inputs.instant_ssh }}\"},"
+                  local ssh_val="false"
+                  local instant_ssh_val="false"
+
+                  if [ "${{ inputs.ssh }}" = "true" ] || [ "${{ inputs.instant_ssh }}" = "true" ]; then
+                    if [ "$device_name" = "${{ inputs.running_ssh_device }}" ]; then
+                      ssh_val="${{ inputs.ssh }}"
+                      instant_ssh_val="${{ inputs.instant_ssh }}"
+                    fi
                   fi
-                else
-                  # SSH disabled, include all devices
-                  matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"false\",\"instant_ssh\":\"false\"},"
-                fi
+                  matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"$ssh_val\",\"instant_ssh\":\"$instant_ssh_val\"},"
               done
               cd ..
             fi
