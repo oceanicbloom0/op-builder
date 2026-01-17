@@ -130,8 +130,8 @@ jobs:
               # Only include devices that need to be built
               # If SSH is enabled, only include the running_ssh_device
               # If SSH is disabled, include all devices
-              local ssh_val="false"
-              local instant_ssh_val="false"
+              ssh_val="false"
+              instant_ssh_val="false"
 
               if [ "${{ inputs.ssh }}" = "true" ] || [ "${{ inputs.instant_ssh }}" = "true" ]; then
                 if [ "$device_name" = "${{ inputs.running_ssh_device }}" ]; then
@@ -148,8 +148,8 @@ jobs:
                 # Only include devices that need to be built
                 # If SSH is enabled, only include the running_ssh_device
                 # If SSH is disabled, include all devices
-                  local ssh_val="false"
-                  local instant_ssh_val="false"
+                  ssh_val="false"
+                  instant_ssh_val="false"
 
                   if [ "${{ inputs.ssh }}" = "true" ] || [ "${{ inputs.instant_ssh }}" = "true" ]; then
                     if [ "$device_name" = "${{ inputs.running_ssh_device }}" ]; then
