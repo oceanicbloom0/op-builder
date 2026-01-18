@@ -122,17 +122,23 @@ jobs:
             # Build all devices
             echo "Building all devices"
             matrix="{\"include\":["
+            
+            # Helper to add device logic (duplicated to avoid function scope issues if any)
+            # Actually we can iterate and append
+            
+            # 1. Main configs
             for d in */ ; do
               if [ "$d" = "STANDALONE_CONF/" ]; then
                 continue
               fi
+              # Check if it's a directory
+              if [ ! -d "$d" ]; then continue; fi
+              
               device_name=${d%/}
-              # Only include devices that need to be built
-              # If SSH is enabled, only include the running_ssh_device
-              # If SSH is disabled, include all devices
+              echo "Found main device: $device_name"
+              
               ssh_val="false"
               instant_ssh_val="false"
-
               if [ "${{ inputs.ssh }}" = "true" ] || [ "${{ inputs.instant_ssh }}" = "true" ]; then
                 if [ "$device_name" = "${{ inputs.running_ssh_device }}" ]; then
                   ssh_val="${{ inputs.ssh }}"
@@ -141,26 +147,29 @@ jobs:
               fi
               matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"$ssh_val\",\"instant_ssh\":\"$instant_ssh_val\"},"
             done
+            
+            # 2. STANDALONE_CONF
             if [ -d "STANDALONE_CONF" ]; then
               cd STANDALONE_CONF
               for d in */ ; do
-                device_name=${d%/}
-                # Only include devices that need to be built
-                # If SSH is enabled, only include the running_ssh_device
-                # If SSH is disabled, include all devices
-                  ssh_val="false"
-                  instant_ssh_val="false"
-
-                  if [ "${{ inputs.ssh }}" = "true" ] || [ "${{ inputs.instant_ssh }}" = "true" ]; then
+                 if [ ! -d "$d" ]; then continue; fi
+                 
+                 device_name=${d%/}
+                 echo "Found standalone device: $device_name"
+                 
+                 ssh_val="false"
+                 instant_ssh_val="false"
+                 if [ "${{ inputs.ssh }}" = "true" ] || [ "${{ inputs.instant_ssh }}" = "true" ]; then
                     if [ "$device_name" = "${{ inputs.running_ssh_device }}" ]; then
                       ssh_val="${{ inputs.ssh }}"
                       instant_ssh_val="${{ inputs.instant_ssh }}"
                     fi
-                  fi
-                  matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"$ssh_val\",\"instant_ssh\":\"$instant_ssh_val\"},"
+                 fi
+                 matrix="$matrix{\"device\":\"$device_name\",\"ssh\":\"$ssh_val\",\"instant_ssh\":\"$instant_ssh_val\"},"
               done
               cd ..
             fi
+            
             matrix=${matrix%,}
             matrix="$matrix]}"
           fi
@@ -173,6 +182,7 @@ jobs:
     needs: generate-matrix
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix: ${{ fromJson(needs.generate-matrix.outputs.matrix) }}
     runs-on: ubuntu-22.04
     steps:
