@@ -38,7 +38,6 @@ jobs:
       #         }
       #       }
 
-
       - name: Free up disk space
         # if: ${{ env.instant_ssh == 'false' && env.ssh == 'false' }}
         uses: jlumbroso/free-disk-space@main
@@ -312,14 +311,15 @@ jobs:
           EOF
 
       - name: Upload firmware to release
-        uses: softprops/action-gh-release@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: ncipollo/release-action@v1
         with:
           name: "${{ env.FIRMWARE_NAME }} | ${{ env.DEVICE }}"
-          tag_name: "${{ env.RELEASE_TAG }}-${{ env.DEVICE }}"
-          body_path: ${{ github.workspace }}/release-text
-          files: ${{ env.PACKAGED_OUTPUTPATH }}/*
+          tag: "${{ env.RELEASE_TAG }}-${{ env.DEVICE }}"
+          bodyFile: ${{ github.workspace }}/release-text
+          artifacts: ${{ env.PACKAGED_OUTPUTPATH }}/*
+          allowUpdates: true
+          replacesArtifacts: true
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       # - name: TG Notification - ✔️
       #   if: ${{ success() }}
