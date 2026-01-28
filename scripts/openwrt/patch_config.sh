@@ -2,6 +2,14 @@
 
 set -e
 
+# 如果是独立配置，跳过此脚本
+STANDALONE_CONF_PATH="$GITHUB_WORKSPACE/configs/STANDALONE_CONF/$DEVICE/.config"
+if [ -f "$STANDALONE_CONF_PATH" ]; then
+    echo "Standalone configuration: Skipping patch_config.sh"
+    exit 0
+fi
+
+
 CONFIG_FILE="$OPENWRT_PATH/.config"
 
 if [ ! -f "$CONFIG_FILE" ]; then
