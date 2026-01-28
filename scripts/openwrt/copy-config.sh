@@ -46,23 +46,8 @@ elif [ -f "$STANDALONE_CONF_PATH" ]; then
     cp "$STANDALONE_CONF_PATH" "$OPENWRT_PATH/.config"
     echo "Copy result: $?"
     echo "Target file exists: $([ -f "$OPENWRT_PATH/.config" ] && echo "YES" || echo "NO")"
-    if [ -n "$APP_CONFIG" ] && [ -f "$GITHUB_WORKSPACE/$APP_CONFIG" ]; then
-        echo "APP_CONFIG is set and file exists: $GITHUB_WORKSPACE/$APP_CONFIG"
-        echo "Appending app.config contents to .config..."
-        # Append additional app configuration if specified
-        cat "$GITHUB_WORKSPACE/$APP_CONFIG" >>"$OPENWRT_PATH/.config"
-        echo "Successfully appended app.config to .config"
-    else
-        echo "APP_CONFIG not set or file not found: APP_CONFIG='$APP_CONFIG', file exists: $([ -f "$GITHUB_WORKSPACE/$APP_CONFIG" ] && echo "YES" || echo "NO")"
-    fi
-    # Append theme configuration
-    if [ -f "$GITHUB_WORKSPACE/configs/theme.config" ]; then
-        cat "$GITHUB_WORKSPACE/configs/theme.config" >>"$OPENWRT_PATH/.config"
-    fi
-    # Append ccache configuration
-    if [ -f "$GITHUB_WORKSPACE/configs/ccache.config" ]; then
-        cat "$GITHUB_WORKSPACE/configs/ccache.config" >>"$OPENWRT_PATH/.config"
-    fi
+    echo "Standalone configuration: Skipping merge with app.config, theme.config, and ccache.config"
+
 else
     echo "Error: .config file not found for DEVICE=$DEVICE"
     exit 1
