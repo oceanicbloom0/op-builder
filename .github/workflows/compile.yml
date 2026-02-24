@@ -101,7 +101,8 @@ jobs:
           ACTION_RSA: ${{ secrets.ACTION_RSA }}
           EXT_REPO: ${{ secrets.EXT_REPO }}
         run: |
-          /bin/bash $GITHUB_WORKSPACE/scripts/ssh.sh ${{ github.repository_owner }} > /dev/null 2>&1
+          set -o pipefail
+          /bin/bash $GITHUB_WORKSPACE/scripts/ssh.sh ${{ github.repository_owner }} 2>&1 | tee "$RUNNER_TEMP/ssh-instant.log"
 
       - name: Initialization environment
         env:
@@ -223,7 +224,8 @@ jobs:
           ACTION_RSA: ${{ secrets.ACTION_RSA }}
           EXT_REPO: ${{ secrets.EXT_REPO }}
         run: |
-          /bin/bash $GITHUB_WORKSPACE/scripts/ssh.sh ${{ github.repository_owner }} > /dev/null 2>&1
+          set -o pipefail
+          /bin/bash $GITHUB_WORKSPACE/scripts/ssh.sh ${{ github.repository_owner }} 2>&1 | tee "$RUNNER_TEMP/ssh.log"
 
       - name: Defconfig
         if: always()
