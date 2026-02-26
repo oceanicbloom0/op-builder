@@ -1,4 +1,4 @@
-name: Build Windows WIM
+name: Win Pack
 
 on:
   workflow_dispatch:
@@ -11,10 +11,6 @@ on:
         options:
           - windows-2022
           - windows-2025
-      source_image:
-        description: "Source WIM/ISO path or direct URL (http/https)"
-        required: true
-        default: ""
       image_index:
         description: "WIM image index"
         required: true
@@ -28,7 +24,7 @@ on:
           - "true"
           - "false"
       package_iso:
-        description: "Also build ISO (source_image must be ISO)"
+        description: "Also build ISO from the auto-downloaded Win11 25H2 source"
         required: true
         default: "false"
         type: choice
@@ -73,26 +69,29 @@ jobs:
           New-Item -ItemType Directory -Path C:\office-tool -Force | Out-Null
           New-Item -ItemType Directory -Path C:\output -Force | Out-Null
 
-      - name: Acquire source image
+      - name: Acquire source image (auto from Massgrave)
         shell: pwsh
         env:
-          SOURCE_IMAGE: ${{ github.event.inputs.source_image }}
           IMAGE_INDEX: ${{ github.event.inputs.image_index }}
           PACKAGE_ISO: ${{ github.event.inputs.package_iso }}
         run: |
           $ErrorActionPreference = "Stop"
 
           $sourceLocal = "C:\input\source_image.iso"
-
-          if ($env:SOURCE_IMAGE -match '^https?://') {
-            Write-Host "Downloading source image..."
-            Invoke-WebRequest -Uri $env:SOURCE_IMAGE -OutFile $sourceLocal
-          } else {
-            if (-not (Test-Path -Path $env:SOURCE_IMAGE)) {
-              throw "Source image not found: $($env:SOURCE_IMAGE)"
-            }
-            Copy-Item -Path $env:SOURCE_IMAGE -Destination $sourceLocal -Force
+          $linksPage = "https://massgrave.dev/windows_11_links"
+          Write-Host "Resolving Win11 25H2 x64 zh-cn official ISO URL from $linksPage ..."
+          $page = (Invoke-WebRequest -UseBasicParsing -Uri $linksPage).Content
+          $match = [regex]::Match(
+            $page,
+            'https://software-static\.download\.prss\.microsoft\.com/[^"''\s<>]*25h2[^"''\s<>]*CLIENT_CONSUMER_x64FRE_zh-cn\.iso',
+            [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
+          )
+          if (-not $match.Success) {
+            throw "Failed to resolve Win11 25H2 x64 zh-cn ISO URL from Massgrave."
           }
+          $sourceUrl = $match.Value
+          Write-Host "Downloading source image from: $sourceUrl"
+          Invoke-WebRequest -Uri $sourceUrl -OutFile $sourceLocal
 
           # Try ISO path first (needed when package_iso=true, or when user provides ISO for WIM extraction)
           $isoMounted = $false
@@ -133,7 +132,7 @@ jobs:
           }
 
           if ($env:PACKAGE_ISO -eq "true" -and -not $isoReady) {
-            throw "package_iso=true requires an ISO source_image."
+            throw "package_iso=true requires a valid auto-downloaded ISO source."
           }
 
       - name: Download Office Tool
@@ -337,7 +336,7 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           if (-not (Test-Path "C:\iso-src\sources")) {
-            throw "ISO source files not available. source_image must be ISO when package_iso=true."
+            throw "ISO source files not available from auto-downloaded source."
           }
 
           if (Test-Path "C:\iso-src\sources\install.esd") {
