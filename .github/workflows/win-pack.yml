@@ -216,95 +216,87 @@ jobs:
             '</Configuration>'
           ) -join "`r`n" | Out-File -FilePath $downloadXml -Encoding utf8 -Force
 
-          # Download Office files using Office Tool Plus with silent mode
-          Write-Host "Downloading Office offline files..."
+          # Download Office offline package using aria2 (similar to Windows ISO download)
+          Write-Host "Downloading Office offline package using aria2..."
+          $officeImgUrl = "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/zh-cn/O365ProPlusRetail.img"
+          $officeImgLocal = "$offlineDir\O365ProPlusRetail.img"
 
-          # According to official documentation: https://www.officetool.plus/zh-cn/usage/command/deploy.html
-          # The correct syntax is using "deploy" command with parameters
-          # For local source: need /srcpath, /ver, and /channel parameters
-          # Product format: "productID_languages" (e.g., O365ProPlusRetail_zh-cn)
-          # Exclude apps: /Product_ID.exclapps app1,app2,... (e.g., /O365ProPlusRetail.exclapps Access,OneDrive,... - 排除其他组件，只安装Word、Excel、PPT)
-          # Accept EULA: /acpteula (not /accepteula)
-          # Silent installation: /display false
+          Write-Host "Office offline package URL: $officeImgUrl"
+          Write-Host "Local destination: $officeImgLocal"
 
-          # Try method 1: Use deploy command with correct parameters for offline download
-          Write-Host "=== Method 1: Using deploy command for download-only ==="
-          $deployArgs = @(
-            "deploy",
-            "/add", "O365ProPlusRetail_zh-cn",  # Product with language
-            "/O365ProPlusRetail.exclapps", "Access,OneDrive,OneNote,Outlook,Publisher,Teams,Groove",
-            "/srcpath", $offlineDir,
-            "/channel", "Current",
-            "/edition", "64",
-            "/ver", "Latest",  # Use latest version (文档要求使用/ver参数)
-            "/display", "false",
-            "/acpteula",
-            "/norestart"
-          )
+          # Check if aria2 is already available (from previous step)
+          $ariaDir = "$root\input\aria2"
+          $ariaExe = Get-ChildItem -Path $ariaDir -Recurse -Filter "aria2c.exe" | Select-Object -First 1
+          if (-not $ariaExe) {
+            # Download aria2 if not found
+            $ariaZip = "$root\input\aria2.zip"
+            New-Item -ItemType Directory -Path $ariaDir -Force | Out-Null
+            Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/aria2/aria2/releases/download/release-1.37.0/aria2-1.37.0-win-64bit-build1.zip" -OutFile $ariaZip
+            Expand-Archive -Path $ariaZip -DestinationPath $ariaDir -Force
+            $ariaExe = Get-ChildItem -Path $ariaDir -Recurse -Filter "aria2c.exe" | Select-Object -First 1
+            if (-not $ariaExe) { throw "aria2c.exe not found." }
+          }
 
-          $deployArgString = $deployArgs -join " "
-          Write-Host "Running: $env:OFFICE_TOOL_EXE $deployArgString"
+          Write-Host "Using aria2 from: $($ariaExe.FullName)"
 
-          $process1 = Start-Process -FilePath $env:OFFICE_TOOL_EXE `
-            -ArgumentList $deployArgString `
-            -Wait -PassThru -NoNewWindow
+          & $ariaExe.FullName `
+            --allow-overwrite=true `
+            --continue=true `
+            --max-connection-per-server=16 `
+            --split=16 `
+            --min-split-size=8M `
+            --file-allocation=none `
+            --summary-interval=5 `
+            --console-log-level=notice `
+            --dir="$offlineDir" `
+            --out="O365ProPlusRetail.img" `
+            "$officeImgUrl"
 
-          if ($process1.ExitCode -eq 0) {
-            Write-Host "✓ Method 1 completed successfully"
-          } else {
-            Write-Warning "Method 1 failed with exit code $($process1.ExitCode)"
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path $officeImgLocal)) {
+            throw "aria2 download of Office offline package failed."
+          }
 
-            # Try method 2: Original XML-based approach but with correct syntax
-            Write-Host "=== Method 2: Using XML configuration ==="
-            $xmlArgString = "/xml `"$downloadXml`" /srcpath `"$offlineDir`" /channel Current /edition 64 /ver Latest /display false /acpteula /norestart"
-            Write-Host "Running: $env:OFFICE_TOOL_EXE $xmlArgString"
+          # Verify the downloaded file
+          $fileInfo = Get-Item $officeImgLocal
+          $fileSizeMB = [math]::Round($fileInfo.Length / 1MB, 2)
+          Write-Host "✓ Office offline package downloaded successfully: $fileSizeMB MB"
 
-            $process2 = Start-Process -FilePath $env:OFFICE_TOOL_EXE `
-              -ArgumentList $xmlArgString `
-              -Wait -PassThru -NoNewWindow
+          # Mount the .img file to extract Office installation files
+          Write-Host "Mounting Office offline .img file..."
+          $imgMounted = $false
+          try {
+            $disk = Mount-DiskImage -ImagePath $officeImgLocal -PassThru -ErrorAction Stop
+            $vol = ($disk | Get-Volume | Select-Object -First 1)
+            if (-not $vol -or -not $vol.DriveLetter) {
+              throw "Failed to get mounted .img drive letter."
+            }
+            $drive = "$($vol.DriveLetter):\"
+            Write-Host ".img mounted at $drive, copying Office files..."
 
-            if ($process2.ExitCode -eq 0) {
-              Write-Host "✓ Method 2 completed successfully"
+            # Create Office\Data directory structure expected by Office Tool Plus
+            $officeDataDir = Join-Path $offlineDir "Office\Data"
+            New-Item -ItemType Directory -Path $officeDataDir -Force | Out-Null
+
+            # Check if the mounted image contains Office\Data directory
+            $sourcePath = "$drive"
+            if (Test-Path "$drive\Office\Data") {
+                $sourcePath = "$drive\Office\Data"
+                Write-Host "Found Office\Data directory in image, copying from $sourcePath"
             } else {
-              Write-Warning "Method 2 failed with exit code $($process2.ExitCode)"
+                Write-Host "Copying all files from image root"
             }
-          }
-
-          # Check if any method succeeded
-          $anyMethodSucceeded = $false
-          if (Test-Path variable:process1 -ErrorAction SilentlyContinue) {
-            if ($process1.ExitCode -eq 0) { $anyMethodSucceeded = $true }
-          }
-          if (Test-Path variable:process2 -ErrorAction SilentlyContinue) {
-            if ($process2.ExitCode -eq 0) { $anyMethodSucceeded = $true }
-          }
-
-          if (-not $anyMethodSucceeded) {
-            Write-Warning "All Office Tool Plus download methods failed, but continuing..."
-          } else {
-            Write-Host "Office Tool Plus completed successfully with at least one method"
-          }
-
-          # Verify some files were downloaded - check multiple possible locations
-          $foundFiles = $false
-          $possiblePaths = @(
-            "$offlineDir\Office\Data\*",
-            "$offlineDir\Office\*",
-            "$offlineDir\*"
-          )
-
-          foreach ($path in $possiblePaths) {
-            if (Test-Path $path) {
-              Write-Host "Office offline files found at: $path"
-              $foundFiles = $true
-              break
+            # Copy files from source path to Office\Data directory
+            Copy-Item -Path "$sourcePath\*" -Destination $officeDataDir -Recurse -Force
+            $imgMounted = $true
+            Write-Host "✓ Office files extracted to $officeDataDir"
+          } catch {
+            Write-Warning "Failed to mount/extract .img file: $_"
+            Write-Host "Will try to use .img file directly as source"
+          } finally {
+            if ($imgMounted) {
+              Dismount-DiskImage -ImagePath $officeImgLocal -ErrorAction SilentlyContinue
+              Write-Host "Unmounted .img file"
             }
-          }
-
-          if ($foundFiles) {
-            Write-Host "✓ Office offline files downloaded successfully"
-          } else {
-            Write-Warning "⚠ No Office offline files found, Office installation will download from internet on first boot"
           }
 
       - name: Download extra installers
@@ -563,10 +555,10 @@ jobs:
           $lines.Add("  echo Checking for Office offline files...")
           $lines.Add("  if exist ""%SystemDrive%\Install\Office\Offline\Office\Data\*"" (")
           $lines.Add("    echo Office offline files found, installing from local source")
-          $lines.Add("    start /wait """" ""%SystemDrive%\Install\Office\Office Tool Plus.exe"" deploy /add O365ProPlusRetail_zh-cn /O365ProPlusRetail.exclapps Access,OneDrive,OneNote,Outlook,Publisher,Teams,Groove /srcpath ""%SystemDrive%\Install\Office\Offline"" /channel Current /edition 64 /ver Latest /display false /acpteula /norestart")
+          $lines.Add("    start /wait """" ""%SystemDrive%\Install\Office\Office Tool Plus.exe"" deploy /add O365ProPlusRetail_zh-cn /O365ProPlusRetail.exclapps Access,OneDrive,OneNote,Outlook,Publisher,Teams,Groove /srcpath ""%SystemDrive%\Install\Office\Offline"" /channel Current /edition 64 /ver Latest /display false /acpteula")
           $lines.Add("  ) else (")
-          $lines.Add("    echo No Office offline files found, downloading from internet")
-          $lines.Add("    start /wait """" ""%SystemDrive%\Install\Office\Office Tool Plus.exe"" deploy /add O365ProPlusRetail_zh-cn /O365ProPlusRetail.exclapps Access,OneDrive,OneNote,Outlook,Publisher,Teams,Groove /channel Current /edition 64 /ver Latest /display false /acpteula /norestart")
+          $lines.Add("    echo ERROR: Office offline files not found. Offline installation required.")
+          $lines.Add("    echo Skipping Office installation.")
           $lines.Add("  )")
           $lines.Add(")")
           $lines.Add("")
@@ -606,7 +598,13 @@ jobs:
           # Use default index 1 if IMAGE_INDEX is not set
           $imageIndex = if ([string]::IsNullOrWhiteSpace($env:IMAGE_INDEX)) { "1" } else { $env:IMAGE_INDEX }
           Write-Host "Using image index: $imageIndex for export"
-          $dst = "$root\output\$($env:OUTPUT_WIM_NAME)"
+          # Use default filename if OUTPUT_WIM_NAME is not set
+          $wimName = if ([string]::IsNullOrWhiteSpace($env:OUTPUT_WIM_NAME)) { "custom-install.wim" } else { $env:OUTPUT_WIM_NAME }
+          $dst = "$root\output\$wimName"
+          # Ensure output directory exists
+          New-Item -ItemType Directory -Path "$root\output" -Force | Out-Null
+          Write-Host "Exporting to: $dst"
+          # Export the modified image to a new WIM file
           dism /Export-Image /SourceImageFile:$root\wim\install.wim /SourceIndex:$imageIndex /DestinationImageFile:$dst /Compress:max /CheckIntegrity
           if ($LASTEXITCODE -ne 0) { throw "DISM export failed" }
           if (-not (Test-Path $dst)) { throw "Output WIM not found: $dst" }
@@ -624,20 +622,32 @@ jobs:
             throw "ISO source files not available from auto-downloaded source."
           }
 
+          # Use default filenames if environment variables are not set
+          $wimName = if ([string]::IsNullOrWhiteSpace($env:OUTPUT_WIM_NAME)) { "custom-install.wim" } else { $env:OUTPUT_WIM_NAME }
+          $isoName = if ([string]::IsNullOrWhiteSpace($env:OUTPUT_ISO_NAME)) { "custom-install.iso" } else { $env:OUTPUT_ISO_NAME }
+
           if (Test-Path "$root\iso-src\sources\install.esd") {
             Remove-Item "$root\iso-src\sources\install.esd" -Force
           }
-          Copy-Item -Path "$root\output\$($env:OUTPUT_WIM_NAME)" -Destination "$root\iso-src\sources\install.wim" -Force
+          $sourceWim = "$root\output\$wimName"
+          if (-not (Test-Path $sourceWim)) {
+            throw "Source WIM not found: $sourceWim"
+          }
+          Copy-Item -Path $sourceWim -Destination "$root\iso-src\sources\install.wim" -Force
 
           $commit = "ac116d70839be8a9312dbe9202999d2191bee67e"
           $oscdimg = "$root\input\oscdimg.exe"
           Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/ChrisTitusTech/winutil/$commit/releases/oscdimg.exe" -OutFile $oscdimg
           if (-not (Test-Path $oscdimg)) { throw "Failed to acquire oscdimg.exe" }
 
-          $outIso = "$root\output\$($env:OUTPUT_ISO_NAME)"
+          $outIso = "$root\output\$isoName"
+          # Ensure output directory exists
+          New-Item -ItemType Directory -Path "$root\output" -Force | Out-Null
+          Write-Host "Building ISO: $outIso"
           $args = "-m -o -u2 -udfver102 -bootdata:2#p0,e,b`"$root\iso-src\boot\etfsboot.com`"#pEF,e,b`"$root\iso-src\efi\microsoft\boot\efisys.bin`" `"$root\iso-src`" `"$outIso`""
           $proc = Start-Process -FilePath $oscdimg -ArgumentList $args -Wait -PassThru -NoNewWindow
           if ($proc.ExitCode -ne 0) { throw "oscdimg failed with exit code $($proc.ExitCode)" }
           if (-not (Test-Path $outIso)) { throw "Output ISO not found: $outIso" }
+          Write-Host "✓ ISO created successfully: $outIso"
 
       # Artifact upload is intentionally disabled for now.
