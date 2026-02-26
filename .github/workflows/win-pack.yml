@@ -87,6 +87,9 @@ jobs:
           $ErrorActionPreference = "Stop"
 
           $root = $env:WORK_ROOT
+          # Use default index 1 if IMAGE_INDEX is not set
+          $imageIndex = if ([string]::IsNullOrWhiteSpace($env:IMAGE_INDEX)) { "1" } else { $env:IMAGE_INDEX }
+          Write-Host "Using image index: $imageIndex"
           $sourceLocal = "$root\input\source_image.iso"
           $linksPage = "https://massgrave.dev/windows_11_links"
           Write-Host "Resolving Win11 25H2 x64 zh-cn official ISO URL from $linksPage ..."
@@ -153,7 +156,7 @@ jobs:
             $isoReady = $true
           } elseif (Test-Path "$root\iso-src\sources\install.esd") {
             Write-Host "install.esd found; exporting selected index to install.wim..."
-            dism /Export-Image /SourceImageFile:$root\iso-src\sources\install.esd /SourceIndex:$env:IMAGE_INDEX /DestinationImageFile:$root\wim\install.wim /Compress:max /CheckIntegrity
+            dism /Export-Image /SourceImageFile:$root\iso-src\sources\install.esd /SourceIndex:$imageIndex /DestinationImageFile:$root\wim\install.wim /Compress:max /CheckIntegrity
             if ($LASTEXITCODE -ne 0) { throw "Export install.esd -> install.wim failed" }
             $isoReady = $true
           } else {
@@ -212,18 +215,48 @@ jobs:
             '</Configuration>'
           ) -join "`r`n" | Out-File -FilePath $downloadXml -Encoding utf8 -Force
 
-          # Download Office files using Office Tool Plus
+          # Download Office files using Office Tool Plus with silent mode
           Write-Host "Downloading Office offline files..."
-          & $env:OFFICE_TOOL_EXE /xml $downloadXml /download true /deploy false /source "$offlineDir"
-          if ($LASTEXITCODE -ne 0) {
-            Write-Warning "Office Tool Plus download exited with code $LASTEXITCODE, but continuing..."
+          $arguments = @(
+            "/xml", $downloadXml,
+            "/download", "true",
+            "/deploy", "false",
+            "/source", $offlineDir,
+            "/quiet",
+            "/acceptEULA"
+          )
+
+          Write-Host "Running: $env:OFFICE_TOOL_EXE $arguments"
+          $process = Start-Process -FilePath $env:OFFICE_TOOL_EXE `
+            -ArgumentList $arguments `
+            -Wait -PassThru -NoNewWindow
+
+          if ($process.ExitCode -ne 0) {
+            Write-Warning "Office Tool Plus download exited with code $($process.ExitCode), but continuing..."
+          } else {
+            Write-Host "Office Tool Plus completed with exit code 0"
           }
 
-          # Verify some files were downloaded
-          if (Test-Path "$offlineDir\Office\Data\*") {
-            Write-Host "Office offline files downloaded successfully"
+          # Verify some files were downloaded - check multiple possible locations
+          $foundFiles = $false
+          $possiblePaths = @(
+            "$offlineDir\Office\Data\*",
+            "$offlineDir\Office\*",
+            "$offlineDir\*"
+          )
+
+          foreach ($path in $possiblePaths) {
+            if (Test-Path $path) {
+              Write-Host "Office offline files found at: $path"
+              $foundFiles = $true
+              break
+            }
+          }
+
+          if ($foundFiles) {
+            Write-Host "✓ Office offline files downloaded successfully"
           } else {
-            Write-Host "No Office offline files found, but continuing..."
+            Write-Warning "⚠ No Office offline files found, Office installation will download from internet on first boot"
           }
 
       - name: Download extra installers
@@ -251,8 +284,6 @@ jobs:
 
       - name: Mount install.wim
         shell: pwsh
-        env:
-          IMAGE_INDEX: ${{ github.event.inputs.image_index }}
         run: |
           $ErrorActionPreference = "Stop"
           $root = $env:WORK_ROOT
@@ -260,13 +291,19 @@ jobs:
             throw "install.wim not found before mount."
           }
 
+          # Use default index 1 if IMAGE_INDEX is not set
+          $imageIndex = if ([string]::IsNullOrWhiteSpace($env:IMAGE_INDEX)) { "1" } else { $env:IMAGE_INDEX }
+          Write-Host "Using image index: $imageIndex"
+
           # ISO-derived files are often read-only on hosted runners; clear attrs and ensure access.
           attrib -R "$root\wim\install.wim"
-          icacls "$root\wim\install.wim" /grant "$env:USERNAME:(F)" /C | Out-Null
-          icacls "$root\wim" /grant "$env:USERNAME:(OI)(CI)F" /T /C | Out-Null
-          icacls "$root\mount" /grant "$env:USERNAME:(OI)(CI)F" /T /C | Out-Null
+          # Fix icacls syntax for Windows Server
+          # Grant Everyone full control to files and directories
+          icacls "$root\wim\install.wim" /grant "Everyone:F" /C | Out-Null
+          icacls "$root\wim" /grant "Everyone:F" /T /C | Out-Null
+          icacls "$root\mount" /grant "Everyone:F" /T /C | Out-Null
 
-          dism /Mount-Image /ImageFile:$root\wim\install.wim /Index:$env:IMAGE_INDEX /MountDir:$root\mount /Optimize
+          dism /Mount-Image /ImageFile:$root\wim\install.wim /Index:$imageIndex /MountDir:$root\mount /Optimize
           if ($LASTEXITCODE -ne 0) { throw "DISM mount failed" }
 
       - name: Apply MicroWin from pinned winutil commit
@@ -474,7 +511,14 @@ jobs:
           $lines.Add("set ARGS=$($env:SOFTWARE_SILENT_ARGS)")
           $lines.Add("")
           $lines.Add("if exist ""%SystemDrive%\Install\Office\Office Tool Plus.exe"" (")
-          $lines.Add("  start /wait """" ""%SystemDrive%\Install\Office\Office Tool Plus.exe"" /xml ""%SystemDrive%\Install\Office\office-word-excel-ppt.xml"" /download false /deploy true /shortcuts true")
+          $lines.Add("  echo Checking for Office offline files...")
+          $lines.Add("  if exist ""%SystemDrive%\Install\Office\Offline\Office\Data\*"" (")
+          $lines.Add("    echo Office offline files found, installing from local source")
+          $lines.Add("    start /wait """" ""%SystemDrive%\Install\Office\Office Tool Plus.exe"" /xml ""%SystemDrive%\Install\Office\office-word-excel-ppt.xml"" /download false /deploy true /shortcuts true /quiet")
+          $lines.Add("  ) else (")
+          $lines.Add("    echo No Office offline files found, downloading from internet")
+          $lines.Add("    start /wait """" ""%SystemDrive%\Install\Office\Office Tool Plus.exe"" /xml ""%SystemDrive%\Install\Office\office-word-excel-ppt.xml"" /download true /deploy true /shortcuts true /quiet")
+          $lines.Add("  )")
           $lines.Add(")")
           $lines.Add("")
           $lines.Add("for %%F in (""%SystemDrive%\Install\*"") do (")
@@ -510,8 +554,11 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $root = $env:WORK_ROOT
+          # Use default index 1 if IMAGE_INDEX is not set
+          $imageIndex = if ([string]::IsNullOrWhiteSpace($env:IMAGE_INDEX)) { "1" } else { $env:IMAGE_INDEX }
+          Write-Host "Using image index: $imageIndex for export"
           $dst = "$root\output\$($env:OUTPUT_WIM_NAME)"
-          dism /Export-Image /SourceImageFile:$root\wim\install.wim /SourceIndex:$env:IMAGE_INDEX /DestinationImageFile:$dst /Compress:max /CheckIntegrity
+          dism /Export-Image /SourceImageFile:$root\wim\install.wim /SourceIndex:$imageIndex /DestinationImageFile:$dst /Compress:max /CheckIntegrity
           if ($LASTEXITCODE -ne 0) { throw "DISM export failed" }
           if (-not (Test-Path $dst)) { throw "Output WIM not found: $dst" }
 
