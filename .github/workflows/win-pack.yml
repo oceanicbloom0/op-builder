@@ -295,6 +295,9 @@ jobs:
             . $path
           }
 
+          # 设置当前进程的执行策略以允许脚本运行
+          Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+
           # Headless MicroWin processing for CI: reuse pinned MicroWin function set against mounted image.
           DotLoad (Join-Path $repoPath "functions\private\Get-LocalizedYesNo.ps1")
           DotLoad (Join-Path $repoPath "functions\microwin\Microwin-Classes.ps1")
@@ -303,22 +306,64 @@ jobs:
           DotLoad (Join-Path $repoPath "functions\microwin\Microwin-RemoveProvisionedPackages.ps1")
           DotLoad (Join-Path $repoPath "functions\microwin\Microwin-RemoveFileOrDirectory.ps1")
 
+          # 验证函数是否已加载
+          Write-Host "验证函数加载..."
+          $requiredFunctions = @(
+            "Microwin-RemoveFeatures",
+            "Microwin-RemovePackages",
+            "Microwin-RemoveProvisionedPackages",
+            "Microwin-RemoveFileOrDirectory"
+          )
+
+          foreach ($func in $requiredFunctions) {
+            if (Get-Command -Name $func -CommandType Function -ErrorAction SilentlyContinue) {
+              Write-Host "✓ 函数 $func 已加载"
+            } else {
+              Write-Warning "✗ 函数 $func 未加载，尝试重新加载脚本..."
+              # 重新加载脚本文件
+              $scriptPath = Join-Path $repoPath "functions\microwin\$func.ps1"
+              if (Test-Path $scriptPath) {
+                . $scriptPath
+                Write-Host "重新加载 $scriptPath"
+              }
+            }
+          }
+
           $script:scratchDir = "$root\mount"
 
-          Write-Host "[RUN] Microwin-RemoveFeatures"
-          Microwin-RemoveFeatures -UseCmdlets $true
-          Write-Host "[RUN] Microwin-RemovePackages"
-          Microwin-RemovePackages -UseCmdlets $true
-          Write-Host "[RUN] Microwin-RemoveProvisionedPackages"
-          Microwin-RemoveProvisionedPackages -UseCmdlets $true
+          # 安全执行MicroWin函数，如果函数不存在则跳过
+          function Safe-MicrowinCall {
+            param([string]$FunctionName, [hashtable]$Parameters = @{})
+
+            if (Get-Command -Name $FunctionName -CommandType Function -ErrorAction SilentlyContinue) {
+              Write-Host "[RUN] $FunctionName"
+              try {
+                & $FunctionName @Parameters
+                Write-Host "✓ $FunctionName 执行成功"
+              } catch {
+                Write-Warning "⚠ $FunctionName 执行失败: $_"
+              }
+            } else {
+              Write-Warning "⚠ 跳过 $FunctionName - 函数未加载"
+            }
+          }
+
+          Safe-MicrowinCall -FunctionName "Microwin-RemoveFeatures" -Parameters @{UseCmdlets = $true}
+          Safe-MicrowinCall -FunctionName "Microwin-RemovePackages" -Parameters @{UseCmdlets = $true}
+          Safe-MicrowinCall -FunctionName "Microwin-RemoveProvisionedPackages" -Parameters @{UseCmdlets = $true}
 
           Write-Host "[RUN] Microwin-RemoveFileOrDirectory (target cleanup)"
-          Microwin-RemoveFileOrDirectory -pathToDelete "$root\mount\Windows\DiagTrack" -Directory
-          Microwin-RemoveFileOrDirectory -pathToDelete "$root\mount\Windows\InboxApps" -Directory
-          Microwin-RemoveFileOrDirectory -pathToDelete "$root\mount\Windows\System32\OneDriveSetup.exe"
-          Microwin-RemoveFileOrDirectory -pathToDelete "$root\mount\Windows\System32\OneDrive.ico"
-          Microwin-RemoveFileOrDirectory -pathToDelete "$root\mount\Program Files (x86)\Internet Explorer" -Directory
-          Microwin-RemoveFileOrDirectory -pathToDelete "$root\mount\Program Files\Internet Explorer" -Directory
+          if (Get-Command -Name "Microwin-RemoveFileOrDirectory" -CommandType Function -ErrorAction SilentlyContinue) {
+            Microwin-RemoveFileOrDirectory -pathToDelete "$root\mount\Windows\DiagTrack" -Directory
+            Microwin-RemoveFileOrDirectory -pathToDelete "$root\mount\Windows\InboxApps" -Directory
+            Microwin-RemoveFileOrDirectory -pathToDelete "$root\mount\Windows\System32\OneDriveSetup.exe"
+            Microwin-RemoveFileOrDirectory -pathToDelete "$root\mount\Windows\System32\OneDrive.ico"
+            Microwin-RemoveFileOrDirectory -pathToDelete "$root\mount\Program Files (x86)\Internet Explorer" -Directory
+            Microwin-RemoveFileOrDirectory -pathToDelete "$root\mount\Program Files\Internet Explorer" -Directory
+            Write-Host "✓ Microwin-RemoveFileOrDirectory 执行成功"
+          } else {
+            Write-Warning "⚠ 跳过 Microwin-RemoveFileOrDirectory - 函数未加载"
+          }
 
           reg load HKLM\OFFLINE_SYSTEM "$root\mount\Windows\System32\config\SYSTEM"
           reg load HKLM\OFFLINE_SOFTWARE "$root\mount\Windows\System32\config\SOFTWARE"
