@@ -195,7 +195,7 @@ jobs:
           $offlineDir = "$root\office-offline"
           New-Item -ItemType Directory -Path $offlineDir -Force | Out-Null
 
-          # Create XML for offline download
+          # Create XML for offline download - 只安装Word、Excel、PPT，排除其他组件
           $downloadXml = Join-Path $offlineDir "download.xml"
           @(
             '<Configuration>'
@@ -208,6 +208,7 @@ jobs:
             '      <ExcludeApp ID="Outlook" />'
             '      <ExcludeApp ID="Publisher" />'
             '      <ExcludeApp ID="Teams" />'
+            '      <ExcludeApp ID="Groove" />'
             '    </Product>'
             '  </Add>'
             '  <Display Level="None" AcceptEULA="TRUE" />'
@@ -217,24 +218,71 @@ jobs:
 
           # Download Office files using Office Tool Plus with silent mode
           Write-Host "Downloading Office offline files..."
-          $arguments = @(
-            "/xml", $downloadXml,
-            "/download", "true",
-            "/deploy", "false",
-            "/source", $offlineDir,
-            "/quiet",
-            "/acceptEULA"
+
+          # According to official documentation: https://www.officetool.plus/zh-cn/usage/command/deploy.html
+          # The correct syntax is using "deploy" command with parameters
+          # For local source: need /srcpath, /ver, and /channel parameters
+          # Product format: "productID_languages" (e.g., O365ProPlusRetail_zh-cn)
+          # Exclude apps: /Product_ID.exclapps app1,app2,... (e.g., /O365ProPlusRetail.exclapps Access,OneDrive,... - 排除其他组件，只安装Word、Excel、PPT)
+          # Accept EULA: /acpteula (not /accepteula)
+          # Silent installation: /display false
+
+          # Try method 1: Use deploy command with correct parameters for offline download
+          Write-Host "=== Method 1: Using deploy command for download-only ==="
+          $deployArgs = @(
+            "deploy",
+            "/add", "O365ProPlusRetail_zh-cn",  # Product with language
+            "/O365ProPlusRetail.exclapps", "Access,OneDrive,OneNote,Outlook,Publisher,Teams,Groove",
+            "/srcpath", $offlineDir,
+            "/channel", "Current",
+            "/edition", "64",
+            "/ver", "Latest",  # Use latest version (文档要求使用/ver参数)
+            "/display", "false",
+            "/acpteula",
+            "/norestart"
           )
 
-          Write-Host "Running: $env:OFFICE_TOOL_EXE $arguments"
-          $process = Start-Process -FilePath $env:OFFICE_TOOL_EXE `
-            -ArgumentList $arguments `
+          $deployArgString = $deployArgs -join " "
+          Write-Host "Running: $env:OFFICE_TOOL_EXE $deployArgString"
+
+          $process1 = Start-Process -FilePath $env:OFFICE_TOOL_EXE `
+            -ArgumentList $deployArgString `
             -Wait -PassThru -NoNewWindow
 
-          if ($process.ExitCode -ne 0) {
-            Write-Warning "Office Tool Plus download exited with code $($process.ExitCode), but continuing..."
+          if ($process1.ExitCode -eq 0) {
+            Write-Host "✓ Method 1 completed successfully"
           } else {
-            Write-Host "Office Tool Plus completed with exit code 0"
+            Write-Warning "Method 1 failed with exit code $($process1.ExitCode)"
+
+            # Try method 2: Original XML-based approach but with correct syntax
+            Write-Host "=== Method 2: Using XML configuration ==="
+            $xmlArgString = "/xml `"$downloadXml`" /srcpath `"$offlineDir`" /channel Current /edition 64 /ver Latest /display false /acpteula /norestart"
+            Write-Host "Running: $env:OFFICE_TOOL_EXE $xmlArgString"
+
+            $process2 = Start-Process -FilePath $env:OFFICE_TOOL_EXE `
+              -ArgumentList $xmlArgString `
+              -Wait -PassThru -NoNewWindow
+
+            if ($process2.ExitCode -eq 0) {
+              Write-Host "✓ Method 2 completed successfully"
+            } else {
+              Write-Warning "Method 2 failed with exit code $($process2.ExitCode)"
+            }
+          }
+
+          # Check if any method succeeded
+          $anyMethodSucceeded = $false
+          if (Test-Path variable:process1 -ErrorAction SilentlyContinue) {
+            if ($process1.ExitCode -eq 0) { $anyMethodSucceeded = $true }
+          }
+          if (Test-Path variable:process2 -ErrorAction SilentlyContinue) {
+            if ($process2.ExitCode -eq 0) { $anyMethodSucceeded = $true }
+          }
+
+          if (-not $anyMethodSucceeded) {
+            Write-Warning "All Office Tool Plus download methods failed, but continuing..."
+          } else {
+            Write-Host "Office Tool Plus completed successfully with at least one method"
           }
 
           # Verify some files were downloaded - check multiple possible locations
@@ -481,10 +529,10 @@ jobs:
             Write-Host "Copied Office offline files to $offlineDst"
           }
 
-          $officeXml = Join-Path $officeDir "office-word-excel-ppt.xml"
+          $officeXml = Join-Path $officeDir "office-word-excel-ppt.xml"  # 只安装Word、Excel、PPT
           @(
             '<Configuration>'
-            '  <Add OfficeClientEdition="64" Channel="Current" SourcePath="Offline">'
+            '  <Add OfficeClientEdition="64" Channel="Current">'
             '    <Product ID="O365ProPlusRetail">'
             '      <Language ID="MatchOS" />'
             '      <ExcludeApp ID="Access" />'
@@ -493,6 +541,7 @@ jobs:
             '      <ExcludeApp ID="Outlook" />'
             '      <ExcludeApp ID="Publisher" />'
             '      <ExcludeApp ID="Teams" />'
+            '      <ExcludeApp ID="Groove" />'
             '    </Product>'
             '  </Add>'
             '  <Display Level="None" AcceptEULA="TRUE" />'
@@ -514,10 +563,10 @@ jobs:
           $lines.Add("  echo Checking for Office offline files...")
           $lines.Add("  if exist ""%SystemDrive%\Install\Office\Offline\Office\Data\*"" (")
           $lines.Add("    echo Office offline files found, installing from local source")
-          $lines.Add("    start /wait """" ""%SystemDrive%\Install\Office\Office Tool Plus.exe"" /xml ""%SystemDrive%\Install\Office\office-word-excel-ppt.xml"" /download false /deploy true /shortcuts true /quiet")
+          $lines.Add("    start /wait """" ""%SystemDrive%\Install\Office\Office Tool Plus.exe"" deploy /add O365ProPlusRetail_zh-cn /O365ProPlusRetail.exclapps Access,OneDrive,OneNote,Outlook,Publisher,Teams,Groove /srcpath ""%SystemDrive%\Install\Office\Offline"" /channel Current /edition 64 /ver Latest /display false /acpteula /norestart")
           $lines.Add("  ) else (")
           $lines.Add("    echo No Office offline files found, downloading from internet")
-          $lines.Add("    start /wait """" ""%SystemDrive%\Install\Office\Office Tool Plus.exe"" /xml ""%SystemDrive%\Install\Office\office-word-excel-ppt.xml"" /download true /deploy true /shortcuts true /quiet")
+          $lines.Add("    start /wait """" ""%SystemDrive%\Install\Office\Office Tool Plus.exe"" deploy /add O365ProPlusRetail_zh-cn /O365ProPlusRetail.exclapps Access,OneDrive,OneNote,Outlook,Publisher,Teams,Groove /channel Current /edition 64 /ver Latest /display false /acpteula /norestart")
           $lines.Add("  )")
           $lines.Add(")")
           $lines.Add("")
