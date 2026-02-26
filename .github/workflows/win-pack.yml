@@ -201,6 +201,16 @@ jobs:
           IMAGE_INDEX: ${{ github.event.inputs.image_index }}
         run: |
           $ErrorActionPreference = "Stop"
+          if (-not (Test-Path "C:\wim\install.wim")) {
+            throw "install.wim not found before mount."
+          }
+
+          # ISO-derived files are often read-only on hosted runners; clear attrs and ensure access.
+          attrib -R "C:\wim\install.wim"
+          icacls "C:\wim\install.wim" /grant "$env:USERNAME:(F)" /C | Out-Null
+          icacls "C:\wim" /grant "$env:USERNAME:(OI)(CI)F" /T /C | Out-Null
+          icacls "C:\mount" /grant "$env:USERNAME:(OI)(CI)F" /T /C | Out-Null
+
           dism /Mount-Image /ImageFile:C:\wim\install.wim /Index:$env:IMAGE_INDEX /MountDir:C:\mount /Optimize
           if ($LASTEXITCODE -ne 0) { throw "DISM mount failed" }
 
