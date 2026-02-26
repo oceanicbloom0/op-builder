@@ -18,7 +18,7 @@ on:
       apply_microwin:
         description: "Apply MicroWin (pinned winutil commit)"
         required: true
-        default: "true"
+        default: "false"
         type: choice
         options:
           - "true"
