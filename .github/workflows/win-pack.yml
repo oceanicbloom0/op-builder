@@ -178,6 +178,48 @@ jobs:
           if (-not $exe) { throw "Office Tool Plus.exe not found in extracted files." }
           "OFFICE_TOOL_EXE=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
+      - name: Download Office offline files
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $root = $env:WORK_ROOT
+          $offlineDir = "$root\office-offline"
+          New-Item -ItemType Directory -Path $offlineDir -Force | Out-Null
+
+          # Create XML for offline download
+          $downloadXml = Join-Path $offlineDir "download.xml"
+          @(
+            '<Configuration>'
+            '  <Add OfficeClientEdition="64" Channel="Current">'
+            '    <Product ID="O365ProPlusRetail">'
+            '      <Language ID="MatchOS" />'
+            '      <ExcludeApp ID="Access" />'
+            '      <ExcludeApp ID="OneDrive" />'
+            '      <ExcludeApp ID="OneNote" />'
+            '      <ExcludeApp ID="Outlook" />'
+            '      <ExcludeApp ID="Publisher" />'
+            '      <ExcludeApp ID="Teams" />'
+            '    </Product>'
+            '  </Add>'
+            '  <Display Level="None" AcceptEULA="TRUE" />'
+            '  <Property Name="FORCEAPPSHUTDOWN" Value="TRUE" />'
+            '</Configuration>'
+          ) -join "`r`n" | Out-File -FilePath $downloadXml -Encoding utf8 -Force
+
+          # Download Office files using Office Tool Plus
+          Write-Host "Downloading Office offline files..."
+          & $env:OFFICE_TOOL_EXE /xml $downloadXml /download true /deploy false /source "$offlineDir"
+          if ($LASTEXITCODE -ne 0) {
+            Write-Warning "Office Tool Plus download exited with code $LASTEXITCODE, but continuing..."
+          }
+
+          # Verify some files were downloaded
+          if (Test-Path "$offlineDir\Office\Data\*") {
+            Write-Host "Office offline files downloaded successfully"
+          } else {
+            Write-Host "No Office offline files found, but continuing..."
+          }
+
       - name: Download extra installers
         shell: pwsh
         env:
@@ -311,24 +353,33 @@ jobs:
           New-Item -ItemType Directory -Path $officeDir -Force | Out-Null
           Copy-Item -Path (Split-Path $env:OFFICE_TOOL_EXE -Parent)\* -Destination $officeDir -Recurse -Force
 
+          # Copy offline Office files if they exist
+          $offlineSrc = "$root\office-offline"
+          if (Test-Path $offlineSrc) {
+            $offlineDst = Join-Path $officeDir "Offline"
+            New-Item -ItemType Directory -Path $offlineDst -Force | Out-Null
+            Copy-Item -Path "$offlineSrc\*" -Destination $offlineDst -Recurse -Force
+            Write-Host "Copied Office offline files to $offlineDst"
+          }
+
           $officeXml = Join-Path $officeDir "office-word-excel-ppt.xml"
-          @'
-          <Configuration>
-            <Add OfficeClientEdition="64" Channel="Current">
-              <Product ID="O365ProPlusRetail">
-                <Language ID="MatchOS" />
-                <ExcludeApp ID="Access" />
-                <ExcludeApp ID="OneDrive" />
-                <ExcludeApp ID="OneNote" />
-                <ExcludeApp ID="Outlook" />
-                <ExcludeApp ID="Publisher" />
-                <ExcludeApp ID="Teams" />
-              </Product>
-            </Add>
-            <Display Level="None" AcceptEULA="TRUE" />
-            <Property Name="FORCEAPPSHUTDOWN" Value="TRUE" />
-          </Configuration>
-          '@ | Out-File -FilePath $officeXml -Encoding utf8 -Force
+          @(
+            '<Configuration>'
+            '  <Add OfficeClientEdition="64" Channel="Current" SourcePath="Offline">'
+            '    <Product ID="O365ProPlusRetail">'
+            '      <Language ID="MatchOS" />'
+            '      <ExcludeApp ID="Access" />'
+            '      <ExcludeApp ID="OneDrive" />'
+            '      <ExcludeApp ID="OneNote" />'
+            '      <ExcludeApp ID="Outlook" />'
+            '      <ExcludeApp ID="Publisher" />'
+            '      <ExcludeApp ID="Teams" />'
+            '    </Product>'
+            '  </Add>'
+            '  <Display Level="None" AcceptEULA="TRUE" />'
+            '  <Property Name="FORCEAPPSHUTDOWN" Value="TRUE" />'
+            '</Configuration>'
+          ) -join "`r`n" | Out-File -FilePath $officeXml -Encoding utf8 -Force
 
           $scriptsDir = "$root\mount\Windows\Setup\Scripts"
           New-Item -ItemType Directory -Path $scriptsDir -Force | Out-Null
@@ -341,7 +392,7 @@ jobs:
           $lines.Add("set ARGS=$($env:SOFTWARE_SILENT_ARGS)")
           $lines.Add("")
           $lines.Add("if exist ""%SystemDrive%\Install\Office\Office Tool Plus.exe"" (")
-          $lines.Add("  start /wait """" ""%SystemDrive%\Install\Office\Office Tool Plus.exe"" /xml ""%SystemDrive%\Install\Office\office-word-excel-ppt.xml"" /download true /deploy true /shortcuts true")
+          $lines.Add("  start /wait """" ""%SystemDrive%\Install\Office\Office Tool Plus.exe"" /xml ""%SystemDrive%\Install\Office\office-word-excel-ppt.xml"" /download false /deploy true /shortcuts true")
           $lines.Add(")")
           $lines.Add("")
           $lines.Add("for %%F in (""%SystemDrive%\Install\*"") do (")
