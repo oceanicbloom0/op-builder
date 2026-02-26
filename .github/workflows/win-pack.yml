@@ -1,6 +1,12 @@
 name: Win Pack
 
 on:
+  push:
+    paths:
+      - '.github/workflows/win-pack.yml'
+  pull_request:
+    paths:
+      - '.github/workflows/win-pack.yml'
   workflow_dispatch:
     inputs:
       runner:
@@ -131,7 +137,7 @@ jobs:
             }
             $drive = "$($vol.DriveLetter):\"
             Write-Host "ISO mounted at $drive, copying files..."
-            Copy-Item -Path "$drive*" -Destination "$root\iso-src\" -Recurse -Force
+            Copy-Item -Path "$drive*" -Destination "$root\iso-src" -Recurse -Force
             $isoMounted = $true
           } catch {
             Write-Host "Source is not mountable as ISO; treat as WIM/ESD."
@@ -415,7 +421,19 @@ jobs:
 
           $officeDir = Join-Path $installDir "Office"
           New-Item -ItemType Directory -Path $officeDir -Force | Out-Null
-          Copy-Item -Path (Split-Path $env:OFFICE_TOOL_EXE -Parent)\* -Destination $officeDir -Recurse -Force
+
+          # 检查OFFICE_TOOL_EXE环境变量是否设置
+          if ([string]::IsNullOrWhiteSpace($env:OFFICE_TOOL_EXE)) {
+            Write-Warning "OFFICE_TOOL_EXE环境变量未设置，跳过Office Tool Plus复制"
+          } else {
+            $officeToolDir = Split-Path $env:OFFICE_TOOL_EXE -Parent
+            if (Test-Path $officeToolDir) {
+              Copy-Item -Path "$officeToolDir\*" -Destination $officeDir -Recurse -Force
+              Write-Host "已复制Office Tool Plus文件"
+            } else {
+              Write-Warning "Office Tool Plus目录不存在: $officeToolDir"
+            }
+          }
 
           # Copy offline Office files if they exist
           $offlineSrc = "$root\office-offline"
