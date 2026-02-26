@@ -61,13 +61,16 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          New-Item -ItemType Directory -Path C:\input -Force | Out-Null
-          New-Item -ItemType Directory -Path C:\wim -Force | Out-Null
-          New-Item -ItemType Directory -Path C:\iso-src -Force | Out-Null
-          New-Item -ItemType Directory -Path C:\mount -Force | Out-Null
-          New-Item -ItemType Directory -Path C:\software -Force | Out-Null
-          New-Item -ItemType Directory -Path C:\office-tool -Force | Out-Null
-          New-Item -ItemType Directory -Path C:\output -Force | Out-Null
+          $root = if (Test-Path "D:\") { "D:" } else { "C:" }
+          Write-Host "Using work root: $root"
+          "WORK_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          New-Item -ItemType Directory -Path "$root\input" -Force | Out-Null
+          New-Item -ItemType Directory -Path "$root\wim" -Force | Out-Null
+          New-Item -ItemType Directory -Path "$root\iso-src" -Force | Out-Null
+          New-Item -ItemType Directory -Path "$root\mount" -Force | Out-Null
+          New-Item -ItemType Directory -Path "$root\software" -Force | Out-Null
+          New-Item -ItemType Directory -Path "$root\office-tool" -Force | Out-Null
+          New-Item -ItemType Directory -Path "$root\output" -Force | Out-Null
 
       - name: Acquire source image
         shell: pwsh
@@ -77,7 +80,8 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
 
-          $sourceLocal = "C:\input\source_image.iso"
+          $root = $env:WORK_ROOT
+          $sourceLocal = "$root\input\source_image.iso"
           $linksPage = "https://massgrave.dev/windows_11_links"
           Write-Host "Resolving Win11 25H2 x64 zh-cn official ISO URL from $linksPage ..."
           $page = (Invoke-WebRequest -UseBasicParsing -Uri $linksPage).Content
@@ -92,8 +96,8 @@ jobs:
           $sourceUrl = $match.Value
           Write-Host "Downloading source image from: $sourceUrl"
 
-          $ariaDir = "C:\input\aria2"
-          $ariaZip = "C:\input\aria2.zip"
+          $ariaDir = "$root\input\aria2"
+          $ariaZip = "$root\input\aria2.zip"
           New-Item -ItemType Directory -Path $ariaDir -Force | Out-Null
           Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/aria2/aria2/releases/download/release-1.37.0/aria2-1.37.0-win-64bit-build1.zip" -OutFile $ariaZip
           Expand-Archive -Path $ariaZip -DestinationPath $ariaDir -Force
@@ -109,7 +113,7 @@ jobs:
             --file-allocation=none `
             --summary-interval=5 `
             --console-log-level=notice `
-            --dir="C:\input" `
+            --dir="$root\input" `
             --out="source_image.iso" `
             "$sourceUrl"
 
@@ -127,7 +131,7 @@ jobs:
             }
             $drive = "$($vol.DriveLetter):\"
             Write-Host "ISO mounted at $drive, copying files..."
-            Copy-Item -Path "$drive*" -Destination "C:\iso-src\" -Recurse -Force
+            Copy-Item -Path "$drive*" -Destination "$root\iso-src\" -Recurse -Force
             $isoMounted = $true
           } catch {
             Write-Host "Source is not mountable as ISO; treat as WIM/ESD."
@@ -138,20 +142,20 @@ jobs:
           }
 
           $isoReady = $false
-          if (Test-Path "C:\iso-src\sources\install.wim") {
-            Copy-Item -Path "C:\iso-src\sources\install.wim" -Destination "C:\wim\install.wim" -Force
+          if (Test-Path "$root\iso-src\sources\install.wim") {
+            Copy-Item -Path "$root\iso-src\sources\install.wim" -Destination "$root\wim\install.wim" -Force
             $isoReady = $true
-          } elseif (Test-Path "C:\iso-src\sources\install.esd") {
+          } elseif (Test-Path "$root\iso-src\sources\install.esd") {
             Write-Host "install.esd found; exporting selected index to install.wim..."
-            dism /Export-Image /SourceImageFile:C:\iso-src\sources\install.esd /SourceIndex:$env:IMAGE_INDEX /DestinationImageFile:C:\wim\install.wim /Compress:max /CheckIntegrity
+            dism /Export-Image /SourceImageFile:$root\iso-src\sources\install.esd /SourceIndex:$env:IMAGE_INDEX /DestinationImageFile:$root\wim\install.wim /Compress:max /CheckIntegrity
             if ($LASTEXITCODE -ne 0) { throw "Export install.esd -> install.wim failed" }
             $isoReady = $true
           } else {
-            Copy-Item -Path $sourceLocal -Destination "C:\wim\install.wim" -Force
+            Copy-Item -Path $sourceLocal -Destination "$root\wim\install.wim" -Force
           }
 
           "ISO_SOURCE_READY=$isoReady" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          if (-not (Test-Path "C:\wim\install.wim")) {
+          if (-not (Test-Path "$root\wim\install.wim")) {
             throw "install.wim is not available."
           }
 
@@ -163,13 +167,14 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
+          $root = $env:WORK_ROOT
           $release = (Invoke-WebRequest -UseBasicParsing -Uri "https://api.github.com/repos/YerongAI/Office-Tool/releases/latest").Content | ConvertFrom-Json
           $asset = $release.assets | Where-Object { $_.name -like "*with_runtime*_x64.zip" } | Select-Object -First 1
           if (-not $asset) { throw "Office Tool x64 runtime zip asset not found." }
-          $zip = "C:\input\office-tool.zip"
+          $zip = "$root\input\office-tool.zip"
           Invoke-WebRequest -UseBasicParsing -Uri $asset.browser_download_url -OutFile $zip
-          Expand-Archive -Path $zip -DestinationPath C:\office-tool -Force
-          $exe = Get-ChildItem -Path C:\office-tool -Recurse -Filter "Office Tool Plus.exe" | Select-Object -First 1
+          Expand-Archive -Path $zip -DestinationPath "$root\office-tool" -Force
+          $exe = Get-ChildItem -Path "$root\office-tool" -Recurse -Filter "Office Tool Plus.exe" | Select-Object -First 1
           if (-not $exe) { throw "Office Tool Plus.exe not found in extracted files." }
           "OFFICE_TOOL_EXE=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
@@ -179,6 +184,7 @@ jobs:
           SOFTWARE_URLS: ${{ github.event.inputs.software_urls }}
         run: |
           $ErrorActionPreference = "Stop"
+          $root = $env:WORK_ROOT
           if ([string]::IsNullOrWhiteSpace($env:SOFTWARE_URLS)) {
             Write-Host "No extra software URLs configured. Skip."
             exit 0
@@ -190,7 +196,7 @@ jobs:
             $uri = [System.Uri]$url
             $name = [System.IO.Path]::GetFileName($uri.LocalPath)
             if ([string]::IsNullOrWhiteSpace($name)) { $name = "installer-$index.bin" }
-            $target = "C:\software\{0:D2}-{1}" -f $index, $name
+            $target = "$root\software\{0:D2}-{1}" -f $index, $name
             Invoke-WebRequest -Uri $url -OutFile $target
             $index++
           }
@@ -201,17 +207,18 @@ jobs:
           IMAGE_INDEX: ${{ github.event.inputs.image_index }}
         run: |
           $ErrorActionPreference = "Stop"
-          if (-not (Test-Path "C:\wim\install.wim")) {
+          $root = $env:WORK_ROOT
+          if (-not (Test-Path "$root\wim\install.wim")) {
             throw "install.wim not found before mount."
           }
 
           # ISO-derived files are often read-only on hosted runners; clear attrs and ensure access.
-          attrib -R "C:\wim\install.wim"
-          icacls "C:\wim\install.wim" /grant "$env:USERNAME:(F)" /C | Out-Null
-          icacls "C:\wim" /grant "$env:USERNAME:(OI)(CI)F" /T /C | Out-Null
-          icacls "C:\mount" /grant "$env:USERNAME:(OI)(CI)F" /T /C | Out-Null
+          attrib -R "$root\wim\install.wim"
+          icacls "$root\wim\install.wim" /grant "$env:USERNAME:(F)" /C | Out-Null
+          icacls "$root\wim" /grant "$env:USERNAME:(OI)(CI)F" /T /C | Out-Null
+          icacls "$root\mount" /grant "$env:USERNAME:(OI)(CI)F" /T /C | Out-Null
 
-          dism /Mount-Image /ImageFile:C:\wim\install.wim /Index:$env:IMAGE_INDEX /MountDir:C:\mount /Optimize
+          dism /Mount-Image /ImageFile:$root\wim\install.wim /Index:$env:IMAGE_INDEX /MountDir:$root\mount /Optimize
           if ($LASTEXITCODE -ne 0) { throw "DISM mount failed" }
 
       - name: Apply MicroWin from pinned winutil commit
@@ -219,9 +226,10 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
+          $root = $env:WORK_ROOT
           $commit = "ac116d70839be8a9312dbe9202999d2191bee67e"
-          $zip = "C:\input\winutil-$commit.zip"
-          $srcRoot = "C:\input\winutil-src"
+          $zip = "$root\input\winutil-$commit.zip"
+          $srcRoot = "$root\input\winutil-src"
 
           Invoke-WebRequest -UseBasicParsing -Uri "https://codeload.github.com/ChrisTitusTech/winutil/zip/$commit" -OutFile $zip
           Expand-Archive -Path $zip -DestinationPath $srcRoot -Force
@@ -240,28 +248,38 @@ jobs:
             throw "winutil.ps1 was not generated from pinned commit."
           }
 
+          function DotLoad([string]$path) {
+            Write-Host "[LOAD] $path"
+            . $path
+          }
+
           # Headless MicroWin processing for CI: reuse pinned MicroWin function set against mounted image.
-          . (Join-Path $repoPath "functions\microwin\Microwin-Classes.ps1")
-          . (Join-Path $repoPath "functions\microwin\Microwin-RemoveFeatures.ps1")
-          . (Join-Path $repoPath "functions\microwin\Microwin-RemovePackages.ps1")
-          . (Join-Path $repoPath "functions\microwin\Microwin-RemoveProvisionedPackages.ps1")
-          . (Join-Path $repoPath "functions\microwin\Microwin-RemoveFileOrDirectory.ps1")
+          DotLoad (Join-Path $repoPath "functions\private\Get-LocalizedYesNo.ps1")
+          DotLoad (Join-Path $repoPath "functions\microwin\Microwin-Classes.ps1")
+          DotLoad (Join-Path $repoPath "functions\microwin\Microwin-RemoveFeatures.ps1")
+          DotLoad (Join-Path $repoPath "functions\microwin\Microwin-RemovePackages.ps1")
+          DotLoad (Join-Path $repoPath "functions\microwin\Microwin-RemoveProvisionedPackages.ps1")
+          DotLoad (Join-Path $repoPath "functions\microwin\Microwin-RemoveFileOrDirectory.ps1")
 
-          $script:scratchDir = "C:\mount"
+          $script:scratchDir = "$root\mount"
 
+          Write-Host "[RUN] Microwin-RemoveFeatures"
           Microwin-RemoveFeatures -UseCmdlets $true
+          Write-Host "[RUN] Microwin-RemovePackages"
           Microwin-RemovePackages -UseCmdlets $true
+          Write-Host "[RUN] Microwin-RemoveProvisionedPackages"
           Microwin-RemoveProvisionedPackages -UseCmdlets $true
 
-          Microwin-RemoveFileOrDirectory -pathToDelete "C:\mount\Windows\DiagTrack" -Directory
-          Microwin-RemoveFileOrDirectory -pathToDelete "C:\mount\Windows\InboxApps" -Directory
-          Microwin-RemoveFileOrDirectory -pathToDelete "C:\mount\Windows\System32\OneDriveSetup.exe"
-          Microwin-RemoveFileOrDirectory -pathToDelete "C:\mount\Windows\System32\OneDrive.ico"
-          Microwin-RemoveFileOrDirectory -pathToDelete "C:\mount\Program Files (x86)\Internet Explorer" -Directory
-          Microwin-RemoveFileOrDirectory -pathToDelete "C:\mount\Program Files\Internet Explorer" -Directory
+          Write-Host "[RUN] Microwin-RemoveFileOrDirectory (target cleanup)"
+          Microwin-RemoveFileOrDirectory -pathToDelete "$root\mount\Windows\DiagTrack" -Directory
+          Microwin-RemoveFileOrDirectory -pathToDelete "$root\mount\Windows\InboxApps" -Directory
+          Microwin-RemoveFileOrDirectory -pathToDelete "$root\mount\Windows\System32\OneDriveSetup.exe"
+          Microwin-RemoveFileOrDirectory -pathToDelete "$root\mount\Windows\System32\OneDrive.ico"
+          Microwin-RemoveFileOrDirectory -pathToDelete "$root\mount\Program Files (x86)\Internet Explorer" -Directory
+          Microwin-RemoveFileOrDirectory -pathToDelete "$root\mount\Program Files\Internet Explorer" -Directory
 
-          reg load HKLM\OFFLINE_SYSTEM "C:\mount\Windows\System32\config\SYSTEM"
-          reg load HKLM\OFFLINE_SOFTWARE "C:\mount\Windows\System32\config\SOFTWARE"
+          reg load HKLM\OFFLINE_SYSTEM "$root\mount\Windows\System32\config\SYSTEM"
+          reg load HKLM\OFFLINE_SOFTWARE "$root\mount\Windows\System32\config\SOFTWARE"
           try {
             reg add "HKLM\OFFLINE_SYSTEM\Setup\LabConfig" /v BypassCPUCheck /t REG_DWORD /d 1 /f
             reg add "HKLM\OFFLINE_SYSTEM\Setup\LabConfig" /v BypassRAMCheck /t REG_DWORD /d 1 /f
@@ -280,12 +298,13 @@ jobs:
           SOFTWARE_SILENT_ARGS: ${{ github.event.inputs.software_silent_args }}
         run: |
           $ErrorActionPreference = "Stop"
+          $root = $env:WORK_ROOT
 
-          $installDir = "C:\mount\Install"
+          $installDir = "$root\mount\Install"
           New-Item -ItemType Directory -Path $installDir -Force | Out-Null
 
-          if (Test-Path "C:\software\*") {
-            Copy-Item -Path "C:\software\*" -Destination $installDir -Recurse -Force
+          if (Test-Path "$root\software\*") {
+            Copy-Item -Path "$root\software\*" -Destination $installDir -Recurse -Force
           }
 
           $officeDir = Join-Path $installDir "Office"
@@ -311,7 +330,7 @@ jobs:
           </Configuration>
           '@ | Out-File -FilePath $officeXml -Encoding utf8 -Force
 
-          $scriptsDir = "C:\mount\Windows\Setup\Scripts"
+          $scriptsDir = "$root\mount\Windows\Setup\Scripts"
           New-Item -ItemType Directory -Path $scriptsDir -Force | Out-Null
           $setupPath = Join-Path $scriptsDir "SetupComplete.cmd"
 
@@ -344,9 +363,10 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          dism /Image:C:\mount /Cleanup-Image /StartComponentCleanup /ResetBase
+          $root = $env:WORK_ROOT
+          dism /Image:$root\mount /Cleanup-Image /StartComponentCleanup /ResetBase
           if ($LASTEXITCODE -ne 0) { throw "DISM cleanup failed" }
-          dism /Unmount-Image /MountDir:C:\mount /Commit
+          dism /Unmount-Image /MountDir:$root\mount /Commit
           if ($LASTEXITCODE -ne 0) { throw "DISM unmount/commit failed" }
 
       - name: Export output WIM
@@ -356,8 +376,9 @@ jobs:
           OUTPUT_WIM_NAME: ${{ github.event.inputs.output_wim_name }}
         run: |
           $ErrorActionPreference = "Stop"
-          $dst = "C:\output\$($env:OUTPUT_WIM_NAME)"
-          dism /Export-Image /SourceImageFile:C:\wim\install.wim /SourceIndex:$env:IMAGE_INDEX /DestinationImageFile:$dst /Compress:max /CheckIntegrity
+          $root = $env:WORK_ROOT
+          $dst = "$root\output\$($env:OUTPUT_WIM_NAME)"
+          dism /Export-Image /SourceImageFile:$root\wim\install.wim /SourceIndex:$env:IMAGE_INDEX /DestinationImageFile:$dst /Compress:max /CheckIntegrity
           if ($LASTEXITCODE -ne 0) { throw "DISM export failed" }
           if (-not (Test-Path $dst)) { throw "Output WIM not found: $dst" }
 
@@ -369,22 +390,23 @@ jobs:
           OUTPUT_ISO_NAME: ${{ github.event.inputs.output_iso_name }}
         run: |
           $ErrorActionPreference = "Stop"
-          if (-not (Test-Path "C:\iso-src\sources")) {
+          $root = $env:WORK_ROOT
+          if (-not (Test-Path "$root\iso-src\sources")) {
             throw "ISO source files not available from auto-downloaded source."
           }
 
-          if (Test-Path "C:\iso-src\sources\install.esd") {
-            Remove-Item "C:\iso-src\sources\install.esd" -Force
+          if (Test-Path "$root\iso-src\sources\install.esd") {
+            Remove-Item "$root\iso-src\sources\install.esd" -Force
           }
-          Copy-Item -Path "C:\output\$($env:OUTPUT_WIM_NAME)" -Destination "C:\iso-src\sources\install.wim" -Force
+          Copy-Item -Path "$root\output\$($env:OUTPUT_WIM_NAME)" -Destination "$root\iso-src\sources\install.wim" -Force
 
           $commit = "ac116d70839be8a9312dbe9202999d2191bee67e"
-          $oscdimg = "C:\input\oscdimg.exe"
+          $oscdimg = "$root\input\oscdimg.exe"
           Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/ChrisTitusTech/winutil/$commit/releases/oscdimg.exe" -OutFile $oscdimg
           if (-not (Test-Path $oscdimg)) { throw "Failed to acquire oscdimg.exe" }
 
-          $outIso = "C:\output\$($env:OUTPUT_ISO_NAME)"
-          $args = "-m -o -u2 -udfver102 -bootdata:2#p0,e,b`"C:\iso-src\boot\etfsboot.com`"#pEF,e,b`"C:\iso-src\efi\microsoft\boot\efisys.bin`" `"C:\iso-src`" `"$outIso`""
+          $outIso = "$root\output\$($env:OUTPUT_ISO_NAME)"
+          $args = "-m -o -u2 -udfver102 -bootdata:2#p0,e,b`"$root\iso-src\boot\etfsboot.com`"#pEF,e,b`"$root\iso-src\efi\microsoft\boot\efisys.bin`" `"$root\iso-src`" `"$outIso`""
           $proc = Start-Process -FilePath $oscdimg -ArgumentList $args -Wait -PassThru -NoNewWindow
           if ($proc.ExitCode -ne 0) { throw "oscdimg failed with exit code $($proc.ExitCode)" }
           if (-not (Test-Path $outIso)) { throw "Output ISO not found: $outIso" }
