@@ -102,6 +102,21 @@ jobs:
           git fetch origin
           git checkout -t origin/main
 
+      - name: Self-test Pro index script
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $root = $env:WORK_ROOT
+          $proIndexScript = "$root\ssh-libs\win\Get-ProEditionIndex.ps1"
+          if (-not (Test-Path $proIndexScript)) {
+            throw "Get-ProEditionIndex.ps1 not found: $proIndexScript"
+          }
+          $result = (& $proIndexScript -SelfTest | Out-String).Trim()
+          if ($result -ne "OK") {
+            throw "Self-test failed, expected OK but got: '$result'"
+          }
+          Write-Host "Pro index script self-test passed."
+
       - name: Acquire source image
         shell: pwsh
         env:
