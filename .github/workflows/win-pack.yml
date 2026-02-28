@@ -178,15 +178,31 @@ jobs:
 
           $info = dism /English /Get-WimInfo /WimFile:$wimPath
           $currentIndex = $null
+          $currentName = $null
+          $currentEdition = $null
           $proIndex = $null
           foreach ($line in $info) {
             if ($line -match "^\s*Index\s*:\s*(\d+)") {
               $currentIndex = $Matches[1]
+              $currentName = $null
+              $currentEdition = $null
               continue
             }
             if ($line -match "^\s*Name\s*:\s*(.+)$") {
-              $name = $Matches[1].Trim()
-              if ($currentIndex -and $name -match "\bPro\b") {
+              $currentName = $Matches[1].Trim()
+              continue
+            }
+            if ($line -match "^\s*Edition\s*:\s*(.+)$") {
+              $currentEdition = $Matches[1].Trim()
+              if ($currentIndex -and $currentEdition -match "^(Professional|Pro)$") {
+                $proIndex = $currentIndex
+                break
+              }
+              continue
+            }
+
+            if ($currentIndex -and $currentName -and -not $proIndex) {
+              if ($currentName -match "(?i)\bProfessional\b|\bPro\b|专业版") {
                 $proIndex = $currentIndex
                 break
               }
