@@ -616,13 +616,28 @@ jobs:
 
           Write-Host "[DEBUG] Source WIM: $root\wim\install.wim"
           Write-Host "[DEBUG] Destination: $dst"
+
+          # Check source WIM info before export
+          Write-Host "[DEBUG] Checking source WIM index count..."
+          $wimInfo = dism /Get-WimInfo /WimFile:$root\wim\install.wim
+          $indexCount = ($wimInfo | Select-String "Index :").Count
+          Write-Host "[DEBUG] Source WIM has $indexCount indexes"
+          if ($imageIndex -gt $indexCount) {
+            throw "ERROR: Requested index $imageIndex exceeds available indexes ($indexCount) in WIM"
+          }
+
           Write-Host "[DEBUG] DISM command: dism /Export-Image /SourceImageFile:$root\wim\install.wim /SourceIndex:$imageIndex /DestinationImageFile:$dst /Compress:fast /CheckIntegrity"
 
           dism /Export-Image /SourceImageFile:$root\wim\install.wim /SourceIndex:$imageIndex /DestinationImageFile:$dst /Compress:fast /CheckIntegrity
           if ($LASTEXITCODE -ne 0) { throw "DISM export failed" }
           if (-not (Test-Path $dst)) { throw "Output WIM not found: $dst" }
           $fileInfo = Get-Item $dst
-          Write-Host "[DEBUG] Output file size: $([math]::Round($fileInfo.Length / 1GB, 2)) GB"
+          $sizeGB = [math]::Round($fileInfo.Length / 1GB, 2)
+          Write-Host "[DEBUG] Output file size: $sizeGB GB"
+
+          if ($sizeGB -gt 8) {
+            throw "ERROR: Output WIM size ($sizeGB GB) exceeds 8GB threshold. Expected size is 4-6GB. The index may be incorrect or the image is corrupted."
+          }
 
       - name: Build output ISO
         if: ${{ github.event.inputs.package_iso == 'true' }}
