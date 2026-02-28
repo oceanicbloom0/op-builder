@@ -446,41 +446,13 @@ jobs:
             reg unload HKLM\OFFLINE_SYSTEM
           }
 
-      - name: Set desktop icons and taskbar combine (offline registry)
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          $root = $env:WORK_ROOT
-
-          $defaultHive = "$root\mount\Users\Default\NTUSER.DAT"
-          if (-not (Test-Path $defaultHive)) {
-            throw "Default user hive not found: $defaultHive"
-          }
-
-          reg load HKU\DEFUSER $defaultHive
-          reg load HKLM\OFFLINE_SOFTWARE "$root\mount\Windows\System32\config\SOFTWARE"
-          try {
-            # Show desktop icons: This PC, User Files, Control Panel, Network
-            $base1 = "HKU\DEFUSER\Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel"
-            $base2 = "HKU\DEFUSER\Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\ClassicStartMenu"
-            reg add $base1 /f | Out-Null
-            reg add $base2 /f | Out-Null
-            reg add $base1 /v "{20D04FE0-3AEA-1069-A2D8-08002B30309D}" /t REG_DWORD /d 0 /f | Out-Null
-            reg add $base1 /v "{59031a47-3f72-44a7-89c5-5595fe6b30ee}" /t REG_DWORD /d 0 /f | Out-Null
-            reg add $base1 /v "{5399E694-6CE5-4D6C-8FCE-1D8870FDCBA0}" /t REG_DWORD /d 0 /f | Out-Null
-            reg add $base1 /v "{F02C1A0D-BE21-4350-88B0-7367FC96EF3C}" /t REG_DWORD /d 0 /f | Out-Null
-            reg add $base2 /v "{20D04FE0-3AEA-1069-A2D8-08002B30309D}" /t REG_DWORD /d 0 /f | Out-Null
-            reg add $base2 /v "{59031a47-3f72-44a7-89c5-5595fe6b30ee}" /t REG_DWORD /d 0 /f | Out-Null
-            reg add $base2 /v "{5399E694-6CE5-4D6C-8FCE-1D8870FDCBA0}" /t REG_DWORD /d 0 /f | Out-Null
-            reg add $base2 /v "{F02C1A0D-BE21-4350-88B0-7367FC96EF3C}" /t REG_DWORD /d 0 /f | Out-Null
-
-            # Taskbar never combine (default user and machine-wide)
-            reg add "HKU\DEFUSER\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" /v "TaskbarGlomLevel" /t REG_DWORD /d 2 /f | Out-Null
-            reg add "HKLM\OFFLINE_SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" /v "TaskbarGlomLevel" /t REG_DWORD /d 2 /f | Out-Null
-          } finally {
-            reg unload HKU\DEFUSER
-            reg unload HKLM\OFFLINE_SOFTWARE
-          }
+      # DEBUG: Temporarily disable registry modifications
+      # - name: Set desktop icons and taskbar combine (offline registry)
+      #   shell: pwsh
+      #   run: |
+      #     $ErrorActionPreference = "Stop"
+      #     $root = $env:WORK_ROOT
+      #     Write-Host "[DEBUG] Skipping registry modifications for testing"
 
       - name: Inject Office Tool, extra installers, and SetupComplete
         shell: pwsh
@@ -635,14 +607,22 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $root = $env:WORK_ROOT
+          Write-Host "[DEBUG] Raw env.IMAGE_INDEX = '$env:IMAGE_INDEX'"
           $imageIndex = if ([string]::IsNullOrWhiteSpace($env:IMAGE_INDEX)) { "1" } else { $env:IMAGE_INDEX }
+          Write-Host "[DEBUG] Using imageIndex = '$imageIndex'"
           $wimName = if ([string]::IsNullOrWhiteSpace($env:OUTPUT_WIM_NAME)) { "custom-install.wim" } else { $env:OUTPUT_WIM_NAME }
           $dst = "$root\output\$wimName"
           New-Item -ItemType Directory -Path "$root\output" -Force | Out-Null
 
+          Write-Host "[DEBUG] Source WIM: $root\wim\install.wim"
+          Write-Host "[DEBUG] Destination: $dst"
+          Write-Host "[DEBUG] DISM command: dism /Export-Image /SourceImageFile:$root\wim\install.wim /SourceIndex:$imageIndex /DestinationImageFile:$dst /Compress:fast /CheckIntegrity"
+
           dism /Export-Image /SourceImageFile:$root\wim\install.wim /SourceIndex:$imageIndex /DestinationImageFile:$dst /Compress:fast /CheckIntegrity
           if ($LASTEXITCODE -ne 0) { throw "DISM export failed" }
           if (-not (Test-Path $dst)) { throw "Output WIM not found: $dst" }
+          $fileInfo = Get-Item $dst
+          Write-Host "[DEBUG] Output file size: $([math]::Round($fileInfo.Length / 1GB, 2)) GB"
 
       - name: Build output ISO
         if: ${{ github.event.inputs.package_iso == 'true' }}
