@@ -176,25 +176,25 @@ jobs:
             throw "install.wim not found for index selection."
           }
 
-          $info = dism /Get-WimInfo /WimFile:$wimPath
-          $lines = $info | Out-String
-          $matches = [regex]::Matches($lines, "Index\\s*:\\s*(\\d+)\\s*\\r?\\n\\s*Name\\s*:\\s*(.+)")
-          if ($matches.Count -eq 0) {
-            throw "Unable to parse WIM indexes."
-          }
-
+          $info = dism /English /Get-WimInfo /WimFile:$wimPath
+          $currentIndex = $null
           $proIndex = $null
-          foreach ($m in $matches) {
-            $idx = $m.Groups[1].Value
-            $name = $m.Groups[2].Value.Trim()
-            if ($name -match '\\bPro\\b') {
-              $proIndex = $idx
-              break
+          foreach ($line in $info) {
+            if ($line -match "^\s*Index\s*:\s*(\d+)") {
+              $currentIndex = $Matches[1]
+              continue
+            }
+            if ($line -match "^\s*Name\s*:\s*(.+)$") {
+              $name = $Matches[1].Trim()
+              if ($currentIndex -and $name -match "\bPro\b") {
+                $proIndex = $currentIndex
+                break
+              }
             }
           }
 
           if (-not $proIndex) {
-            throw "Pro edition not found in WIM."
+            throw "Pro edition not found in WIM. Check /Get-WimInfo output for available editions."
           }
 
           Write-Host "Using Pro edition index: $proIndex"
