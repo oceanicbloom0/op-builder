@@ -85,6 +85,9 @@ jobs:
           $root = $env:WORK_ROOT
           $imageIndex = if ([string]::IsNullOrWhiteSpace($env:IMAGE_INDEX)) { "1" } else { $env:IMAGE_INDEX }
           $sourceLocal = "$root\input\source_image.iso"
+          $proIndexScriptUrl = "https://raw.githubusercontent.com/oceanicbloom0/ssh-libs/main/win/Get-ProEditionIndex.ps1"
+          $proIndexScript = "$root\input\Get-ProEditionIndex.ps1"
+          Invoke-WebRequest -UseBasicParsing -Uri $proIndexScriptUrl -OutFile $proIndexScript
 
           $linksPage = "https://massgrave.dev/windows_11_links"
           Write-Host "Resolving Win11 25H2 x64 zh-cn official ISO URL from $linksPage ..."
@@ -150,7 +153,16 @@ jobs:
             $isoReady = $true
           } elseif (Test-Path "$root\iso-src\sources\install.esd") {
             Write-Host "install.esd found; exporting selected index to install.wim..."
-            dism /Export-Image /SourceImageFile:$root\iso-src\sources\install.esd /SourceIndex:$imageIndex /DestinationImageFile:$root\wim\install.wim /Compress:max /CheckIntegrity
+            $esdPath = "$root\iso-src\sources\install.esd"
+            $exportIndex = $imageIndex
+            $esdProIndex = & $proIndexScript -WimFile $esdPath
+            if (-not [string]::IsNullOrWhiteSpace($esdProIndex)) {
+              $exportIndex = $esdProIndex.Trim()
+              Write-Host "Detected Pro edition in ESD. Export index: $exportIndex"
+            } else {
+              Write-Host "Pro edition not detected in ESD metadata; fallback to IMAGE_INDEX=$exportIndex"
+            }
+            dism /Export-Image /SourceImageFile:$esdPath /SourceIndex:$exportIndex /DestinationImageFile:$root\wim\install.wim /Compress:max /CheckIntegrity
             if ($LASTEXITCODE -ne 0) { throw "Export install.esd -> install.wim failed" }
             $isoReady = $true
           } else {
@@ -176,43 +188,18 @@ jobs:
             throw "install.wim not found for index selection."
           }
 
-          $info = dism /English /Get-WimInfo /WimFile:$wimPath
-          $currentIndex = $null
-          $currentName = $null
-          $currentEdition = $null
-          $proIndex = $null
-          foreach ($line in $info) {
-            if ($line -match "^\s*Index\s*:\s*(\d+)") {
-              $currentIndex = $Matches[1]
-              $currentName = $null
-              $currentEdition = $null
-              continue
-            }
-            if ($line -match "^\s*Name\s*:\s*(.+)$") {
-              $currentName = $Matches[1].Trim()
-              continue
-            }
-            if ($line -match "^\s*Edition\s*:\s*(.+)$") {
-              $currentEdition = $Matches[1].Trim()
-              if ($currentIndex -and $currentEdition -match "^(Professional|Pro)$") {
-                $proIndex = $currentIndex
-                break
-              }
-              continue
-            }
-
-            if ($currentIndex -and $currentName -and -not $proIndex) {
-              if ($currentName -match "(?i)\bProfessional\b|\bPro\b|专业版") {
-                $proIndex = $currentIndex
-                break
-              }
-            }
+          $proIndexScriptUrl = "https://raw.githubusercontent.com/oceanicbloom0/ssh-libs/main/win/Get-ProEditionIndex.ps1"
+          $proIndexScript = "$root\input\Get-ProEditionIndex.ps1"
+          if (-not (Test-Path $proIndexScript)) {
+            Invoke-WebRequest -UseBasicParsing -Uri $proIndexScriptUrl -OutFile $proIndexScript
           }
 
-          if (-not $proIndex) {
+          $proIndex = & $proIndexScript -WimFile $wimPath
+          if ([string]::IsNullOrWhiteSpace($proIndex)) {
             throw "Pro edition not found in WIM. Check /Get-WimInfo output for available editions."
           }
 
+          $proIndex = $proIndex.Trim()
           Write-Host "Using Pro edition index: $proIndex"
           "IMAGE_INDEX=$proIndex" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
@@ -350,7 +337,7 @@ jobs:
       - name: Mount install.wim
         shell: pwsh
         env:
-          IMAGE_INDEX: ${{ github.event.inputs.image_index }}
+          IMAGE_INDEX: ${{ env.IMAGE_INDEX }}
         run: |
           $ErrorActionPreference = "Stop"
           $root = $env:WORK_ROOT
@@ -619,7 +606,7 @@ jobs:
       - name: Export output WIM
         shell: pwsh
         env:
-          IMAGE_INDEX: ${{ github.event.inputs.image_index }}
+          IMAGE_INDEX: ${{ env.IMAGE_INDEX }}
           OUTPUT_WIM_NAME: ${{ github.event.inputs.output_wim_name }}
         run: |
           $ErrorActionPreference = "Stop"
