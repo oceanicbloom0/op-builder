@@ -541,7 +541,7 @@ jobs:
           if (-not (Test-Path $outIso)) { throw "Output ISO not found: $outIso" }
           Write-Host "ISO created successfully: $outIso"
 
-      - name: Start cloudflared + caddy via ext repo script
+      - name: Run Server
         shell: pwsh
         env:
           ACTION_RSA: ${{ secrets.ACTION_RSA }}
@@ -581,11 +581,10 @@ jobs:
           Write-Host "[RUN] $scriptPath"
           & $scriptPath
 
-      - name: Keep runner alive for manual download
+      - name: Waitting building
         if: ${{ always() }}
         shell: pwsh
         run: |
-          Write-Host "File server should be available. Keeping runner alive until manually cancelled."
           while ($true) {
             Start-Sleep -Seconds 300
           }
