@@ -581,10 +581,6 @@ jobs:
           Write-Host "[RUN] $scriptPath"
           & $scriptPath
 
-      - name: Waitting building
-        if: ${{ always() }}
-        shell: pwsh
-        run: |
           while ($true) {
             Start-Sleep -Seconds 300
           }
