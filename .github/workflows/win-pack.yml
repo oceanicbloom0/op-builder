@@ -203,29 +203,29 @@ jobs:
             throw "package_iso=true requires a valid auto-downloaded ISO source."
           }
 
-      - name: Select Pro edition index
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          $root = $env:WORK_ROOT
-          $wimPath = "$root\wim\install.wim"
-          if (-not (Test-Path $wimPath)) {
-            throw "install.wim not found for index selection."
-          }
-
-          $proIndexScript = "$root\ssh-libs\win\Get-ProEditionIndex.ps1"
-          if (-not (Test-Path $proIndexScript)) {
-            throw "Get-ProEditionIndex.ps1 not found: $proIndexScript"
-          }
-
-          $proIndex = & $proIndexScript -WimFile $wimPath
-          if ([string]::IsNullOrWhiteSpace($proIndex)) {
-            throw "Pro edition not found in WIM. Check /Get-WimInfo output for available editions."
-          }
-
-          $proIndex = $proIndex.Trim()
-          Write-Host "Using Pro edition index: $proIndex"
-          "IMAGE_INDEX=$proIndex" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      # - name: Select Pro edition index
+      #   shell: pwsh
+      #   run: |
+      #     $ErrorActionPreference = "Stop"
+      #     $root = $env:WORK_ROOT
+      #     $wimPath = "$root\wim\install.wim"
+      #     if (-not (Test-Path $wimPath)) {
+      #       throw "install.wim not found for index selection."
+      #     }
+      #
+      #     $proIndexScript = "$root\ssh-libs\win\Get-ProEditionIndex.ps1"
+      #     if (-not (Test-Path $proIndexScript)) {
+      #       throw "Get-ProEditionIndex.ps1 not found: $proIndexScript"
+      #     }
+      #
+      #     $proIndex = & $proIndexScript -WimFile $wimPath
+      #     if ([string]::IsNullOrWhiteSpace($proIndex)) {
+      #       throw "Pro edition not found in WIM. Check /Get-WimInfo output for available editions."
+      #     }
+      #
+      #     $proIndex = $proIndex.Trim()
+      #     Write-Host "Using Pro edition index: $proIndex"
+      #     "IMAGE_INDEX=$proIndex" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: Download Office Tool
         shell: pwsh
