@@ -497,7 +497,7 @@ jobs:
           $dst = "$root\output\$wimName"
           New-Item -ItemType Directory -Path "$root\output" -Force | Out-Null
 
-          dism /Export-Image /SourceImageFile:$root\wim\install.wim /SourceIndex:$imageIndex /DestinationImageFile:$dst /Compress:max /CheckIntegrity
+          dism /Export-Image /SourceImageFile:$root\wim\install.wim /SourceIndex:$imageIndex /DestinationImageFile:$dst /Compress:fast /CheckIntegrity
           if ($LASTEXITCODE -ne 0) { throw "DISM export failed" }
           if (-not (Test-Path $dst)) { throw "Output WIM not found: $dst" }
 
