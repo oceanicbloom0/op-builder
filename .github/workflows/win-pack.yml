@@ -63,7 +63,9 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          $root = $env:WORK_ROOT
+          $root = if (Test-Path "D:\") { "D:" } else { "C:" }
+          Write-Host "Using work root: $root"
+          "WORK_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           New-Item -ItemType Directory -Path "$root\input" -Force | Out-Null
           New-Item -ItemType Directory -Path "$root\wim" -Force | Out-Null
           New-Item -ItemType Directory -Path "$root\iso-src" -Force | Out-Null
@@ -80,10 +82,7 @@ jobs:
           EXT_REPO: ${{ secrets.EXT_REPO }}
         run: |
           $ErrorActionPreference = "Stop"
-
-          $root = if (Test-Path "D:\") { "D:" } else { "C:" }
-          Write-Host "Using work root: $root"
-          "WORK_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          $root = $env:WORK_ROOT
 
           $sshDir = Join-Path $env:USERPROFILE ".ssh"
           New-Item -ItemType Directory -Path $sshDir -Force | Out-Null
@@ -497,10 +496,16 @@ jobs:
 
           $offlineSrc = "$root\office-offline"
           if (Test-Path $offlineSrc) {
-            $offlineDst = Join-Path $officeDir "Offline"
-            New-Item -ItemType Directory -Path $offlineDst -Force | Out-Null
-            Copy-Item -Path "$offlineSrc\*" -Destination $offlineDst -Recurse -Force
-            Write-Host "Copied Office offline files to $offlineDst"
+            # Only inject Office\Data payload; avoid copying large source IMG into the OS image.
+            $offlineDataSrc = Join-Path $offlineSrc "Office\Data"
+            if (Test-Path $offlineDataSrc) {
+              $offlineDataDst = Join-Path $officeDir "Offline\Office\Data"
+              New-Item -ItemType Directory -Path $offlineDataDst -Force | Out-Null
+              Copy-Item -Path "$offlineDataSrc\*" -Destination $offlineDataDst -Recurse -Force
+              Write-Host "Copied Office offline data files to $offlineDataDst"
+            } else {
+              Write-Warning "Office offline data path not found: $offlineDataSrc"
+            }
           }
 
           $officeXml = Join-Path $officeDir "office-word-excel-ppt.xml"
@@ -536,35 +541,6 @@ jobs:
             '      <UILanguage>zh-CN</UILanguage>'
             '      <UserLocale>zh-CN</UserLocale>'
             '    </component>'
-            '    <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">'
-            '      <OOBE>'
-            '        <HideEULAPage>true</HideEULAPage>'
-            '        <HideOEMRegistrationScreen>true</HideOEMRegistrationScreen>'
-            '        <HideOnlineAccountScreens>true</HideOnlineAccountScreens>'
-            '        <HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE>'
-            '        <NetworkLocation>Work</NetworkLocation>'
-            '        <ProtectYourPC>3</ProtectYourPC>'
-            '      </OOBE>'
-            '      <SkipMachineOOBE>true</SkipMachineOOBE>'
-            '      <SkipUserOOBE>true</SkipUserOOBE>'
-            '      <AutoLogon>'
-            '        <Enabled>true</Enabled>'
-            '        <Username>admin</Username>'
-            '        <LogonCount>999</LogonCount>'
-            '      </AutoLogon>'
-            '      <UserAccounts>'
-            '        <LocalAccounts>'
-            '          <LocalAccount wcm:action="add">'
-            '            <Name>admin</Name>'
-            '            <Group>Administrators</Group>'
-            '            <Password>'
-            '              <Value></Value>'
-            '              <PlainText>true</PlainText>'
-            '            </Password>'
-            '          </LocalAccount>'
-            '        </LocalAccounts>'
-            '      </UserAccounts>'
-            '    </component>'
             '  </settings>'
             '</unattend>'
           ) -join "`r`n" | Out-File -FilePath $unattendPath -Encoding utf8 -Force
@@ -579,15 +555,7 @@ jobs:
           $lines.Add("echo [win-pack] start SetupComplete")
           $lines.Add("set ARGS=$($env:SOFTWARE_SILENT_ARGS)")
           $lines.Add("")
-          $lines.Add("if exist ""%SystemDrive%\Install\Office\Office Tool Plus.exe"" (")
-          $lines.Add("  echo Checking for Office offline files...")
-          $lines.Add("  if exist ""%SystemDrive%\Install\Office\Offline\Office\Data\*"" (")
-          $lines.Add("    echo Office offline files found, installing from local source")
-          $lines.Add("    start /wait """" ""%SystemDrive%\Install\Office\Office Tool Plus.exe"" deploy /add O365ProPlusRetail_zh-cn /O365ProPlusRetail.exclapps Access,OneDrive,OneNote,Outlook,Publisher,Teams,Groove /srcpath ""%SystemDrive%\Install\Office\Offline"" /channel Current /edition 64 /ver Latest /display false /acpteula")
-          $lines.Add("  ) else (")
-          $lines.Add("    echo ERROR: Office offline files not found. Skipping Office installation.")
-          $lines.Add("  )")
-          $lines.Add(")")
+          $lines.Add("echo [win-pack] Office files copied only; no Office auto-install in SetupComplete for boot stability.")
           $lines.Add("")
           $lines.Add("for %%F in (""%SystemDrive%\Install\*"") do (")
           $lines.Add("  if /I ""%%~xF""=="".msi"" (")
@@ -641,17 +609,23 @@ jobs:
             throw "ERROR: Requested index $imageIndex exceeds available indexes ($indexCount) in WIM"
           }
 
-          Write-Host "[DEBUG] DISM command: dism /Export-Image /SourceImageFile:$root\wim\install.wim /SourceIndex:$imageIndex /DestinationImageFile:$dst /Compress:fast /CheckIntegrity"
+          Write-Host "[DEBUG] DISM command: dism /Export-Image /SourceImageFile:$root\wim\install.wim /SourceIndex:$imageIndex /DestinationImageFile:$dst /Compress:max /CheckIntegrity"
 
-          dism /Export-Image /SourceImageFile:$root\wim\install.wim /SourceIndex:$imageIndex /DestinationImageFile:$dst /Compress:fast /CheckIntegrity
+          dism /Export-Image /SourceImageFile:$root\wim\install.wim /SourceIndex:$imageIndex /DestinationImageFile:$dst /Compress:max /CheckIntegrity
           if ($LASTEXITCODE -ne 0) { throw "DISM export failed" }
           if (-not (Test-Path $dst)) { throw "Output WIM not found: $dst" }
+          $outInfo = dism /English /Get-WimInfo /WimFile:$dst
+          $outIndexCount = ($outInfo | Select-String "^\s*Index\s*:\s*\d+").Count
+          Write-Host "[DEBUG] Output WIM index count: $outIndexCount"
+          if ($outIndexCount -ne 1) {
+            throw "ERROR: Output WIM must contain exactly 1 index, actual: $outIndexCount"
+          }
           $fileInfo = Get-Item $dst
           $sizeGB = [math]::Round($fileInfo.Length / 1GB, 2)
           Write-Host "[DEBUG] Output file size: $sizeGB GB"
 
           if ($sizeGB -gt 8) {
-            throw "ERROR: Output WIM size ($sizeGB GB) exceeds 8GB threshold. Expected size is 4-6GB. The index may be incorrect or the image is corrupted."
+            Write-Warning "Output WIM size is $sizeGB GB (>8GB). This can be expected when bundling large offline payloads."
           }
 
       - name: Build output ISO
