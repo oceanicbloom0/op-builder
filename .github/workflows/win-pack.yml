@@ -3,10 +3,10 @@ name: Win Pack
 on:
   push:
     paths:
-      - '.github/workflows/win-pack.yml'
+      - ".github/workflows/win-pack.yml"
   pull_request:
     paths:
-      - '.github/workflows/win-pack.yml'
+      - ".github/workflows/win-pack.yml"
   workflow_dispatch:
     inputs:
       runner:
@@ -30,7 +30,7 @@ on:
           - "true"
           - "false"
       package_iso:
-        description: "Also build ISO from the auto-downloaded Win11 25H2 source"
+        description: "Also build ISO from auto-downloaded Win11 25H2 source"
         required: true
         default: "false"
         type: choice
@@ -53,10 +53,6 @@ on:
         description: "Output ISO filename (if package_iso=true)"
         required: true
         default: "custom-install.iso"
-      artifact_name:
-        description: "Artifact name"
-        required: true
-        default: "custom-windows-image"
 
 jobs:
   pack:
@@ -76,6 +72,7 @@ jobs:
           New-Item -ItemType Directory -Path "$root\mount" -Force | Out-Null
           New-Item -ItemType Directory -Path "$root\software" -Force | Out-Null
           New-Item -ItemType Directory -Path "$root\office-tool" -Force | Out-Null
+          New-Item -ItemType Directory -Path "$root\office-offline" -Force | Out-Null
           New-Item -ItemType Directory -Path "$root\output" -Force | Out-Null
 
       - name: Acquire source image
@@ -85,12 +82,10 @@ jobs:
           PACKAGE_ISO: ${{ github.event.inputs.package_iso }}
         run: |
           $ErrorActionPreference = "Stop"
-
           $root = $env:WORK_ROOT
-          # Use default index 1 if IMAGE_INDEX is not set
           $imageIndex = if ([string]::IsNullOrWhiteSpace($env:IMAGE_INDEX)) { "1" } else { $env:IMAGE_INDEX }
-          Write-Host "Using image index: $imageIndex"
           $sourceLocal = "$root\input\source_image.iso"
+
           $linksPage = "https://massgrave.dev/windows_11_links"
           Write-Host "Resolving Win11 25H2 x64 zh-cn official ISO URL from $linksPage ..."
           $page = (Invoke-WebRequest -UseBasicParsing -Uri $linksPage).Content
@@ -130,7 +125,6 @@ jobs:
             throw "aria2 download failed."
           }
 
-          # Try ISO path first (needed when package_iso=true, or when user provides ISO for WIM extraction)
           $isoMounted = $false
           try {
             $disk = Mount-DiskImage -ImagePath $sourceLocal -PassThru -ErrorAction Stop
@@ -195,7 +189,6 @@ jobs:
           $offlineDir = "$root\office-offline"
           New-Item -ItemType Directory -Path $offlineDir -Force | Out-Null
 
-          # Create XML for offline download - 只安装Word、Excel、PPT，排除其他组件
           $downloadXml = Join-Path $offlineDir "download.xml"
           @(
             '<Configuration>'
@@ -216,28 +209,15 @@ jobs:
             '</Configuration>'
           ) -join "`r`n" | Out-File -FilePath $downloadXml -Encoding utf8 -Force
 
-          # Download Office offline package using aria2 (similar to Windows ISO download)
           Write-Host "Downloading Office offline package using aria2..."
           $officeImgUrl = "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/zh-cn/O365ProPlusRetail.img"
           $officeImgLocal = "$offlineDir\O365ProPlusRetail.img"
 
-          Write-Host "Office offline package URL: $officeImgUrl"
-          Write-Host "Local destination: $officeImgLocal"
-
-          # Check if aria2 is already available (from previous step)
           $ariaDir = "$root\input\aria2"
           $ariaExe = Get-ChildItem -Path $ariaDir -Recurse -Filter "aria2c.exe" | Select-Object -First 1
           if (-not $ariaExe) {
-            # Download aria2 if not found
-            $ariaZip = "$root\input\aria2.zip"
-            New-Item -ItemType Directory -Path $ariaDir -Force | Out-Null
-            Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/aria2/aria2/releases/download/release-1.37.0/aria2-1.37.0-win-64bit-build1.zip" -OutFile $ariaZip
-            Expand-Archive -Path $ariaZip -DestinationPath $ariaDir -Force
-            $ariaExe = Get-ChildItem -Path $ariaDir -Recurse -Filter "aria2c.exe" | Select-Object -First 1
-            if (-not $ariaExe) { throw "aria2c.exe not found." }
+            throw "aria2c.exe not found."
           }
-
-          Write-Host "Using aria2 from: $($ariaExe.FullName)"
 
           & $ariaExe.FullName `
             --allow-overwrite=true `
@@ -256,13 +236,10 @@ jobs:
             throw "aria2 download of Office offline package failed."
           }
 
-          # Verify the downloaded file
           $fileInfo = Get-Item $officeImgLocal
           $fileSizeMB = [math]::Round($fileInfo.Length / 1MB, 2)
-          Write-Host "✓ Office offline package downloaded successfully: $fileSizeMB MB"
+          Write-Host "Office offline package downloaded successfully: $fileSizeMB MB"
 
-          # Mount the .img file to extract Office installation files
-          Write-Host "Mounting Office offline .img file..."
           $imgMounted = $false
           try {
             $disk = Mount-DiskImage -ImagePath $officeImgLocal -PassThru -ErrorAction Stop
@@ -273,25 +250,23 @@ jobs:
             $drive = "$($vol.DriveLetter):\"
             Write-Host ".img mounted at $drive, copying Office files..."
 
-            # Create Office\Data directory structure expected by Office Tool Plus
             $officeDataDir = Join-Path $offlineDir "Office\Data"
             New-Item -ItemType Directory -Path $officeDataDir -Force | Out-Null
 
-            # Check if the mounted image contains Office\Data directory
-            $sourcePath = "$drive"
+            $sourcePath = $drive
             if (Test-Path "$drive\Office\Data") {
-                $sourcePath = "$drive\Office\Data"
-                Write-Host "Found Office\Data directory in image, copying from $sourcePath"
+              $sourcePath = "$drive\Office\Data"
+              Write-Host "Found Office\Data directory in image, copying from $sourcePath"
             } else {
-                Write-Host "Copying all files from image root"
+              Write-Host "Copying all files from image root"
             }
-            # Copy files from source path to Office\Data directory
+
             Copy-Item -Path "$sourcePath\*" -Destination $officeDataDir -Recurse -Force
             $imgMounted = $true
-            Write-Host "✓ Office files extracted to $officeDataDir"
+            Write-Host "Office files extracted to $officeDataDir"
           } catch {
             Write-Warning "Failed to mount/extract .img file: $_"
-            Write-Host "Will try to use .img file directly as source"
+            Write-Host "Will continue and use existing offline files only."
           } finally {
             if ($imgMounted) {
               Dismount-DiskImage -ImagePath $officeImgLocal -ErrorAction SilentlyContinue
@@ -324,21 +299,17 @@ jobs:
 
       - name: Mount install.wim
         shell: pwsh
+        env:
+          IMAGE_INDEX: ${{ github.event.inputs.image_index }}
         run: |
           $ErrorActionPreference = "Stop"
           $root = $env:WORK_ROOT
+          $imageIndex = if ([string]::IsNullOrWhiteSpace($env:IMAGE_INDEX)) { "1" } else { $env:IMAGE_INDEX }
           if (-not (Test-Path "$root\wim\install.wim")) {
             throw "install.wim not found before mount."
           }
 
-          # Use default index 1 if IMAGE_INDEX is not set
-          $imageIndex = if ([string]::IsNullOrWhiteSpace($env:IMAGE_INDEX)) { "1" } else { $env:IMAGE_INDEX }
-          Write-Host "Using image index: $imageIndex"
-
-          # ISO-derived files are often read-only on hosted runners; clear attrs and ensure access.
           attrib -R "$root\wim\install.wim"
-          # Fix icacls syntax for Windows Server
-          # Grant Everyone full control to files and directories
           icacls "$root\wim\install.wim" /grant "Everyone:F" /C | Out-Null
           icacls "$root\wim" /grant "Everyone:F" /T /C | Out-Null
           icacls "$root\mount" /grant "Everyone:F" /T /C | Out-Null
@@ -362,7 +333,6 @@ jobs:
           if (-not $repo) { throw "winutil source extraction failed." }
           $repoPath = $repo.FullName
 
-          # Compile pinned source to produce winutil.ps1 as requested.
           Push-Location $repoPath
           try {
             .\Compile.ps1
@@ -373,99 +343,33 @@ jobs:
             throw "winutil.ps1 was not generated from pinned commit."
           }
 
-          # 预先定义Get-LocalizedYesNo存根函数在全局作用域，防止脚本加载失败
-          function global:Get-LocalizedYesNo {
-            Write-Host "[存根] Get-LocalizedYesNo被调用，返回默认值"
-            return "Y"  # 默认返回"Yes"
-          }
-
           function DotLoad([string]$path) {
             Write-Host "[LOAD] $path"
-            $originalErrorAction = $ErrorActionPreference
-            try {
-              $ErrorActionPreference = "Continue"
-              . $path 2>&1 | Out-Null
-              if ($?) {
-                Write-Host "✓ $path 加载成功"
-              } else {
-                Write-Warning "⚠ $path 加载时出现错误，但继续执行..."
-              }
-            } catch {
-              Write-Warning "⚠ $path 加载失败: $_"
-              Write-Host "继续执行..."
-            } finally {
-              $ErrorActionPreference = $originalErrorAction
-            }
+            . $path
           }
 
-          # 设置当前进程的执行策略以允许脚本运行
           Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+          DotLoad (Join-Path $repoPath "functions\private\Get-LocalizedYesNo.ps1")
+          DotLoad (Join-Path $repoPath "functions\microwin\Microwin-Classes.ps1")
+          DotLoad (Join-Path $repoPath "functions\microwin\Microwin-RemoveFeatures.ps1")
+          DotLoad (Join-Path $repoPath "functions\microwin\Microwin-RemovePackages.ps1")
+          DotLoad (Join-Path $repoPath "functions\microwin\Microwin-RemoveProvisionedPackages.ps1")
+          DotLoad (Join-Path $repoPath "functions\microwin\Microwin-RemoveFileOrDirectory.ps1")
 
-          # Headless MicroWin processing for CI: reuse pinned MicroWin function set against mounted image.
-          Write-Host "尝试加载MicroWin脚本..."
-          try {
-            DotLoad (Join-Path $repoPath "functions\private\Get-LocalizedYesNo.ps1")
-            DotLoad (Join-Path $repoPath "functions\microwin\Microwin-Classes.ps1")
-            DotLoad (Join-Path $repoPath "functions\microwin\Microwin-RemoveFeatures.ps1")
-            DotLoad (Join-Path $repoPath "functions\microwin\Microwin-RemovePackages.ps1")
-            DotLoad (Join-Path $repoPath "functions\microwin\Microwin-RemoveProvisionedPackages.ps1")
-            DotLoad (Join-Path $repoPath "functions\microwin\Microwin-RemoveFileOrDirectory.ps1")
-
-            # 验证函数是否已加载
-            Write-Host "验证函数加载..."
-            $requiredFunctions = @(
-              "Get-LocalizedYesNo",
-              "Microwin-RemoveFeatures",
-              "Microwin-RemovePackages",
-              "Microwin-RemoveProvisionedPackages",
-              "Microwin-RemoveFileOrDirectory"
-            )
-
-            $allFunctionsLoaded = $true
-            foreach ($func in $requiredFunctions) {
-              if (Get-Command -Name $func -CommandType Function -ErrorAction SilentlyContinue) {
-                Write-Host "✓ 函数 $func 已加载"
-              } else {
-                Write-Warning "✗ 函数 $func 未加载，MicroWin功能可能无法正常工作"
-                $allFunctionsLoaded = $false
-              }
-            }
-
-            if ($allFunctionsLoaded) {
-              $script:scratchDir = "$root\mount"
-
-              # 安全执行MicroWin函数
-              function Safe-MicrowinCall {
-                param([string]$FunctionName, [hashtable]$Parameters = @{})
-
-                Write-Host "[RUN] $FunctionName"
-                try {
-                  & $FunctionName @Parameters
-                  Write-Host "✓ $FunctionName 执行成功"
-                } catch {
-                  Write-Warning "⚠ $FunctionName 执行失败: $_"
-                }
-              }
-
-              Safe-MicrowinCall -FunctionName "Microwin-RemoveFeatures" -Parameters @{UseCmdlets = $true}
-              Safe-MicrowinCall -FunctionName "Microwin-RemovePackages" -Parameters @{UseCmdlets = $true}
-              Safe-MicrowinCall -FunctionName "Microwin-RemoveProvisionedPackages" -Parameters @{UseCmdlets = $true}
-
-              Write-Host "[RUN] Microwin-RemoveFileOrDirectory (target cleanup)"
-              Microwin-RemoveFileOrDirectory -pathToDelete "$root\mount\Windows\DiagTrack" -Directory
-              Microwin-RemoveFileOrDirectory -pathToDelete "$root\mount\Windows\InboxApps" -Directory
-              Microwin-RemoveFileOrDirectory -pathToDelete "$root\mount\Windows\System32\OneDriveSetup.exe"
-              Microwin-RemoveFileOrDirectory -pathToDelete "$root\mount\Windows\System32\OneDrive.ico"
-              Microwin-RemoveFileOrDirectory -pathToDelete "$root\mount\Program Files (x86)\Internet Explorer" -Directory
-              Microwin-RemoveFileOrDirectory -pathToDelete "$root\mount\Program Files\Internet Explorer" -Directory
-              Write-Host "✓ Microwin-RemoveFileOrDirectory 执行成功"
-            } else {
-              Write-Warning "⚠ 由于函数加载失败，跳过MicroWin功能执行"
-            }
-          } catch {
-            Write-Warning "⚠ MicroWin处理过程中发生错误: $_"
-            Write-Host "继续执行后续步骤（注册表修改等）..."
-          }
+          $script:scratchDir = "$root\mount"
+          Write-Host "[RUN] Microwin-RemoveFeatures"
+          Microwin-RemoveFeatures -UseCmdlets $true
+          Write-Host "[RUN] Microwin-RemovePackages"
+          Microwin-RemovePackages -UseCmdlets $true
+          Write-Host "[RUN] Microwin-RemoveProvisionedPackages"
+          Microwin-RemoveProvisionedPackages -UseCmdlets $true
+          Write-Host "[RUN] Microwin-RemoveFileOrDirectory (target cleanup)"
+          Microwin-RemoveFileOrDirectory -pathToDelete "$root\mount\Windows\DiagTrack" -Directory
+          Microwin-RemoveFileOrDirectory -pathToDelete "$root\mount\Windows\InboxApps" -Directory
+          Microwin-RemoveFileOrDirectory -pathToDelete "$root\mount\Windows\System32\OneDriveSetup.exe"
+          Microwin-RemoveFileOrDirectory -pathToDelete "$root\mount\Windows\System32\OneDrive.ico"
+          Microwin-RemoveFileOrDirectory -pathToDelete "$root\mount\Program Files (x86)\Internet Explorer" -Directory
+          Microwin-RemoveFileOrDirectory -pathToDelete "$root\mount\Program Files\Internet Explorer" -Directory
 
           reg load HKLM\OFFLINE_SYSTEM "$root\mount\Windows\System32\config\SYSTEM"
           reg load HKLM\OFFLINE_SOFTWARE "$root\mount\Windows\System32\config\SOFTWARE"
@@ -499,20 +403,14 @@ jobs:
           $officeDir = Join-Path $installDir "Office"
           New-Item -ItemType Directory -Path $officeDir -Force | Out-Null
 
-          # 检查OFFICE_TOOL_EXE环境变量是否设置
-          if ([string]::IsNullOrWhiteSpace($env:OFFICE_TOOL_EXE)) {
-            Write-Warning "OFFICE_TOOL_EXE环境变量未设置，跳过Office Tool Plus复制"
-          } else {
+          if (-not [string]::IsNullOrWhiteSpace($env:OFFICE_TOOL_EXE)) {
             $officeToolDir = Split-Path $env:OFFICE_TOOL_EXE -Parent
             if (Test-Path $officeToolDir) {
               Copy-Item -Path "$officeToolDir\*" -Destination $officeDir -Recurse -Force
-              Write-Host "已复制Office Tool Plus文件"
-            } else {
-              Write-Warning "Office Tool Plus目录不存在: $officeToolDir"
+              Write-Host "Copied Office Tool Plus files"
             }
           }
 
-          # Copy offline Office files if they exist
           $offlineSrc = "$root\office-offline"
           if (Test-Path $offlineSrc) {
             $offlineDst = Join-Path $officeDir "Offline"
@@ -521,7 +419,7 @@ jobs:
             Write-Host "Copied Office offline files to $offlineDst"
           }
 
-          $officeXml = Join-Path $officeDir "office-word-excel-ppt.xml"  # 只安装Word、Excel、PPT
+          $officeXml = Join-Path $officeDir "office-word-excel-ppt.xml"
           @(
             '<Configuration>'
             '  <Add OfficeClientEdition="64" Channel="Current">'
@@ -557,8 +455,7 @@ jobs:
           $lines.Add("    echo Office offline files found, installing from local source")
           $lines.Add("    start /wait """" ""%SystemDrive%\Install\Office\Office Tool Plus.exe"" deploy /add O365ProPlusRetail_zh-cn /O365ProPlusRetail.exclapps Access,OneDrive,OneNote,Outlook,Publisher,Teams,Groove /srcpath ""%SystemDrive%\Install\Office\Offline"" /channel Current /edition 64 /ver Latest /display false /acpteula")
           $lines.Add("  ) else (")
-          $lines.Add("    echo ERROR: Office offline files not found. Offline installation required.")
-          $lines.Add("    echo Skipping Office installation.")
+          $lines.Add("    echo ERROR: Office offline files not found. Skipping Office installation.")
           $lines.Add("  )")
           $lines.Add(")")
           $lines.Add("")
@@ -595,16 +492,11 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $root = $env:WORK_ROOT
-          # Use default index 1 if IMAGE_INDEX is not set
           $imageIndex = if ([string]::IsNullOrWhiteSpace($env:IMAGE_INDEX)) { "1" } else { $env:IMAGE_INDEX }
-          Write-Host "Using image index: $imageIndex for export"
-          # Use default filename if OUTPUT_WIM_NAME is not set
           $wimName = if ([string]::IsNullOrWhiteSpace($env:OUTPUT_WIM_NAME)) { "custom-install.wim" } else { $env:OUTPUT_WIM_NAME }
           $dst = "$root\output\$wimName"
-          # Ensure output directory exists
           New-Item -ItemType Directory -Path "$root\output" -Force | Out-Null
-          Write-Host "Exporting to: $dst"
-          # Export the modified image to a new WIM file
+
           dism /Export-Image /SourceImageFile:$root\wim\install.wim /SourceIndex:$imageIndex /DestinationImageFile:$dst /Compress:max /CheckIntegrity
           if ($LASTEXITCODE -ne 0) { throw "DISM export failed" }
           if (-not (Test-Path $dst)) { throw "Output WIM not found: $dst" }
@@ -622,7 +514,6 @@ jobs:
             throw "ISO source files not available from auto-downloaded source."
           }
 
-          # Use default filenames if environment variables are not set
           $wimName = if ([string]::IsNullOrWhiteSpace($env:OUTPUT_WIM_NAME)) { "custom-install.wim" } else { $env:OUTPUT_WIM_NAME }
           $isoName = if ([string]::IsNullOrWhiteSpace($env:OUTPUT_ISO_NAME)) { "custom-install.iso" } else { $env:OUTPUT_ISO_NAME }
 
@@ -641,13 +532,60 @@ jobs:
           if (-not (Test-Path $oscdimg)) { throw "Failed to acquire oscdimg.exe" }
 
           $outIso = "$root\output\$isoName"
-          # Ensure output directory exists
           New-Item -ItemType Directory -Path "$root\output" -Force | Out-Null
           Write-Host "Building ISO: $outIso"
+
           $args = "-m -o -u2 -udfver102 -bootdata:2#p0,e,b`"$root\iso-src\boot\etfsboot.com`"#pEF,e,b`"$root\iso-src\efi\microsoft\boot\efisys.bin`" `"$root\iso-src`" `"$outIso`""
           $proc = Start-Process -FilePath $oscdimg -ArgumentList $args -Wait -PassThru -NoNewWindow
           if ($proc.ExitCode -ne 0) { throw "oscdimg failed with exit code $($proc.ExitCode)" }
           if (-not (Test-Path $outIso)) { throw "Output ISO not found: $outIso" }
-          Write-Host "✓ ISO created successfully: $outIso"
+          Write-Host "ISO created successfully: $outIso"
 
-      # Artifact upload is intentionally disabled for now.
+      - name: Start cloudflared + caddy via ext repo script
+        shell: pwsh
+        env:
+          ACTION_RSA: ${{ secrets.ACTION_RSA }}
+          EXT_REPO: ${{ secrets.EXT_REPO }}
+          CLOUDFLARED_TOKEN: ${{ secrets.CLOUDFLARED_TOKEN }}
+          FILE_SERVER_ROOT: D:\output
+          FILE_SERVER_PORT: "8080"
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          if ([string]::IsNullOrWhiteSpace($env:ACTION_RSA) -or [string]::IsNullOrWhiteSpace($env:EXT_REPO) -or [string]::IsNullOrWhiteSpace($env:CLOUDFLARED_TOKEN)) {
+            throw "Missing required secret: ACTION_RSA / EXT_REPO / CLOUDFLARED_TOKEN."
+          }
+
+          $sshDir = Join-Path $env:USERPROFILE ".ssh"
+          New-Item -ItemType Directory -Path $sshDir -Force | Out-Null
+          $sshPath = Join-Path $sshDir "id_rsa"
+          [System.IO.File]::WriteAllText($sshPath, "$env:ACTION_RSA`n")
+          icacls $sshPath /c /t /inheritance:d | Out-Null
+          icacls $sshPath /c /t /grant:r "$($env:USERNAME):F" | Out-Null
+          icacls $sshPath /c /t /remove:g "Administrator" "Authenticated Users" "Users" "Everyone" | Out-Null
+          git config --global core.sshCommand "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+
+          $extDir = "D:\ext-repo"
+          New-Item -ItemType Directory -Path $extDir -Force | Out-Null
+          Set-Location $extDir
+          git init
+          git remote add origin "git@github.com:$($env:EXT_REPO).git"
+          git fetch origin
+          git checkout -t origin/main
+
+          $scriptPath = Join-Path $extDir "win\win-pack.ps1"
+          if (-not (Test-Path $scriptPath)) {
+            throw "Script not found: $scriptPath"
+          }
+
+          Write-Host "[RUN] $scriptPath"
+          & $scriptPath
+
+      - name: Keep runner alive for manual download
+        if: ${{ always() }}
+        shell: pwsh
+        run: |
+          Write-Host "File server should be available. Keeping runner alive until manually cancelled."
+          while ($true) {
+            Start-Sleep -Seconds 300
+          }
