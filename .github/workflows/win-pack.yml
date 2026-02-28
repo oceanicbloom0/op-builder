@@ -63,9 +63,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          $root = if (Test-Path "D:\") { "D:" } else { "C:" }
-          Write-Host "Using work root: $root"
-          "WORK_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          $root = $env:WORK_ROOT
           New-Item -ItemType Directory -Path "$root\input" -Force | Out-Null
           New-Item -ItemType Directory -Path "$root\wim" -Force | Out-Null
           New-Item -ItemType Directory -Path "$root\iso-src" -Force | Out-Null
@@ -74,6 +72,35 @@ jobs:
           New-Item -ItemType Directory -Path "$root\office-tool" -Force | Out-Null
           New-Item -ItemType Directory -Path "$root\office-offline" -Force | Out-Null
           New-Item -ItemType Directory -Path "$root\output" -Force | Out-Null
+
+      - name: Clone ssh-libs repo
+        shell: pwsh
+        env:
+          ACTION_RSA: ${{ secrets.ACTION_RSA }}
+          EXT_REPO: ${{ secrets.EXT_REPO }}
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $root = if (Test-Path "D:\") { "D:" } else { "C:" }
+          Write-Host "Using work root: $root"
+          "WORK_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+          $sshDir = Join-Path $env:USERPROFILE ".ssh"
+          New-Item -ItemType Directory -Path $sshDir -Force | Out-Null
+          $sshPath = Join-Path $sshDir "id_rsa"
+          [System.IO.File]::WriteAllText($sshPath, "$env:ACTION_RSA`n")
+          icacls $sshPath /c /t /inheritance:d | Out-Null
+          icacls $sshPath /c /t /grant:r "$($env:USERNAME):F" | Out-Null
+          icacls $sshPath /c /t /remove:g "Administrator" "Authenticated Users" "Users" "Everyone" | Out-Null
+          git config --global core.sshCommand "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+
+          $sshLibsDir = "$root\ssh-libs"
+          New-Item -ItemType Directory -Path $sshLibsDir -Force | Out-Null
+          Set-Location $sshLibsDir
+          git init
+          git remote add origin "git@github.com:$($env:EXT_REPO).git"
+          git fetch origin
+          git checkout -t origin/main
 
       - name: Acquire source image
         shell: pwsh
@@ -85,9 +112,7 @@ jobs:
           $root = $env:WORK_ROOT
           $imageIndex = if ([string]::IsNullOrWhiteSpace($env:IMAGE_INDEX)) { "1" } else { $env:IMAGE_INDEX }
           $sourceLocal = "$root\input\source_image.iso"
-          $proIndexScriptUrl = "https://raw.githubusercontent.com/oceanicbloom0/ssh-libs/main/win/Get-ProEditionIndex.ps1"
-          $proIndexScript = "$root\input\Get-ProEditionIndex.ps1"
-          Invoke-WebRequest -UseBasicParsing -Uri $proIndexScriptUrl -OutFile $proIndexScript
+          $proIndexScript = "$root\ssh-libs\win\Get-ProEditionIndex.ps1"
 
           $linksPage = "https://massgrave.dev/windows_11_links"
           Write-Host "Resolving Win11 25H2 x64 zh-cn official ISO URL from $linksPage ..."
@@ -188,10 +213,9 @@ jobs:
             throw "install.wim not found for index selection."
           }
 
-          $proIndexScriptUrl = "https://raw.githubusercontent.com/oceanicbloom0/ssh-libs/main/win/Get-ProEditionIndex.ps1"
-          $proIndexScript = "$root\input\Get-ProEditionIndex.ps1"
+          $proIndexScript = "$root\ssh-libs\win\Get-ProEditionIndex.ps1"
           if (-not (Test-Path $proIndexScript)) {
-            Invoke-WebRequest -UseBasicParsing -Uri $proIndexScriptUrl -OutFile $proIndexScript
+            throw "Get-ProEditionIndex.ps1 not found: $proIndexScript"
           }
 
           $proIndex = & $proIndexScript -WimFile $wimPath
