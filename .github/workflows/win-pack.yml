@@ -166,6 +166,40 @@ jobs:
             throw "package_iso=true requires a valid auto-downloaded ISO source."
           }
 
+      - name: Select Pro edition index
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $root = $env:WORK_ROOT
+          $wimPath = "$root\wim\install.wim"
+          if (-not (Test-Path $wimPath)) {
+            throw "install.wim not found for index selection."
+          }
+
+          $info = dism /Get-WimInfo /WimFile:$wimPath
+          $lines = $info | Out-String
+          $matches = [regex]::Matches($lines, "Index\\s*:\\s*(\\d+)\\s*\\r?\\n\\s*Name\\s*:\\s*(.+)")
+          if ($matches.Count -eq 0) {
+            throw "Unable to parse WIM indexes."
+          }
+
+          $proIndex = $null
+          foreach ($m in $matches) {
+            $idx = $m.Groups[1].Value
+            $name = $m.Groups[2].Value.Trim()
+            if ($name -match '\\bPro\\b') {
+              $proIndex = $idx
+              break
+            }
+          }
+
+          if (-not $proIndex) {
+            throw "Pro edition not found in WIM."
+          }
+
+          Write-Host "Using Pro edition index: $proIndex"
+          "IMAGE_INDEX=$proIndex" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
       - name: Download Office Tool
         shell: pwsh
         run: |
