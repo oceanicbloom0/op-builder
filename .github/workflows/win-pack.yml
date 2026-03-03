@@ -53,6 +53,14 @@ on:
         description: "Output ISO filename (if package_iso=true)"
         required: true
         default: "custom-install.iso"
+      include_office_payload:
+        description: "Bundle Office offline payload into image (large size impact)"
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
 
 jobs:
   pack:
@@ -242,6 +250,7 @@ jobs:
           "IMAGE_INDEX=$proIndex" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: Download Office Tool
+        if: ${{ github.event.inputs.include_office_payload == 'true' }}
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -257,6 +266,7 @@ jobs:
           "OFFICE_TOOL_EXE=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: Download Office offline files
+        if: ${{ github.event.inputs.include_office_payload == 'true' }}
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -472,6 +482,7 @@ jobs:
         shell: pwsh
         env:
           SOFTWARE_SILENT_ARGS: ${{ github.event.inputs.software_silent_args }}
+          INCLUDE_OFFICE_PAYLOAD: ${{ github.event.inputs.include_office_payload }}
         run: |
           $ErrorActionPreference = "Stop"
           $root = $env:WORK_ROOT
@@ -484,49 +495,55 @@ jobs:
           }
 
           $officeDir = Join-Path $installDir "Office"
-          New-Item -ItemType Directory -Path $officeDir -Force | Out-Null
+          if ($env:INCLUDE_OFFICE_PAYLOAD -eq "true") {
+            New-Item -ItemType Directory -Path $officeDir -Force | Out-Null
 
-          if (-not [string]::IsNullOrWhiteSpace($env:OFFICE_TOOL_EXE)) {
-            $officeToolDir = Split-Path $env:OFFICE_TOOL_EXE -Parent
-            if (Test-Path $officeToolDir) {
-              Copy-Item -Path "$officeToolDir\*" -Destination $officeDir -Recurse -Force
-              Write-Host "Copied Office Tool Plus files"
+            if (-not [string]::IsNullOrWhiteSpace($env:OFFICE_TOOL_EXE)) {
+              $officeToolDir = Split-Path $env:OFFICE_TOOL_EXE -Parent
+              if (Test-Path $officeToolDir) {
+                Copy-Item -Path "$officeToolDir\*" -Destination $officeDir -Recurse -Force
+                Write-Host "Copied Office Tool Plus files"
+              }
             }
+
+            $offlineSrc = "$root\office-offline"
+            if (Test-Path $offlineSrc) {
+              # Only inject Office\Data payload; avoid copying large source IMG into the OS image.
+              $offlineDataSrc = Join-Path $offlineSrc "Office\Data"
+              if (Test-Path $offlineDataSrc) {
+                $offlineDataDst = Join-Path $officeDir "Offline\Office\Data"
+                New-Item -ItemType Directory -Path $offlineDataDst -Force | Out-Null
+                Copy-Item -Path "$offlineDataSrc\*" -Destination $offlineDataDst -Recurse -Force
+                Write-Host "Copied Office offline data files to $offlineDataDst"
+              } else {
+                Write-Warning "Office offline data path not found: $offlineDataSrc"
+              }
+            }
+          } else {
+            Write-Host "INCLUDE_OFFICE_PAYLOAD=false, skip Office payload injection."
           }
 
-          $offlineSrc = "$root\office-offline"
-          if (Test-Path $offlineSrc) {
-            # Only inject Office\Data payload; avoid copying large source IMG into the OS image.
-            $offlineDataSrc = Join-Path $offlineSrc "Office\Data"
-            if (Test-Path $offlineDataSrc) {
-              $offlineDataDst = Join-Path $officeDir "Offline\Office\Data"
-              New-Item -ItemType Directory -Path $offlineDataDst -Force | Out-Null
-              Copy-Item -Path "$offlineDataSrc\*" -Destination $offlineDataDst -Recurse -Force
-              Write-Host "Copied Office offline data files to $offlineDataDst"
-            } else {
-              Write-Warning "Office offline data path not found: $offlineDataSrc"
-            }
+          if ($env:INCLUDE_OFFICE_PAYLOAD -eq "true") {
+            $officeXml = Join-Path $officeDir "office-word-excel-ppt.xml"
+            @(
+              '<Configuration>'
+              '  <Add OfficeClientEdition="64" Channel="Current">'
+              '    <Product ID="O365ProPlusRetail">'
+              '      <Language ID="MatchOS" />'
+              '      <ExcludeApp ID="Access" />'
+              '      <ExcludeApp ID="OneDrive" />'
+              '      <ExcludeApp ID="OneNote" />'
+              '      <ExcludeApp ID="Outlook" />'
+              '      <ExcludeApp ID="Publisher" />'
+              '      <ExcludeApp ID="Teams" />'
+              '      <ExcludeApp ID="Groove" />'
+              '    </Product>'
+              '  </Add>'
+              '  <Display Level="None" AcceptEULA="TRUE" />'
+              '  <Property Name="FORCEAPPSHUTDOWN" Value="TRUE" />'
+              '</Configuration>'
+            ) -join "`r`n" | Out-File -FilePath $officeXml -Encoding utf8 -Force
           }
-
-          $officeXml = Join-Path $officeDir "office-word-excel-ppt.xml"
-          @(
-            '<Configuration>'
-            '  <Add OfficeClientEdition="64" Channel="Current">'
-            '    <Product ID="O365ProPlusRetail">'
-            '      <Language ID="MatchOS" />'
-            '      <ExcludeApp ID="Access" />'
-            '      <ExcludeApp ID="OneDrive" />'
-            '      <ExcludeApp ID="OneNote" />'
-            '      <ExcludeApp ID="Outlook" />'
-            '      <ExcludeApp ID="Publisher" />'
-            '      <ExcludeApp ID="Teams" />'
-            '      <ExcludeApp ID="Groove" />'
-            '    </Product>'
-            '  </Add>'
-            '  <Display Level="None" AcceptEULA="TRUE" />'
-            '  <Property Name="FORCEAPPSHUTDOWN" Value="TRUE" />'
-            '</Configuration>'
-          ) -join "`r`n" | Out-File -FilePath $officeXml -Encoding utf8 -Force
 
           $pantherDir = "$root\mount\Windows\Panther"
           New-Item -ItemType Directory -Path $pantherDir -Force | Out-Null
