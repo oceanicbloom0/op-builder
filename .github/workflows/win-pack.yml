@@ -1,9 +1,9 @@
 name: Win Pack
 
 on:
-  push:
-    paths:
-      - ".github/workflows/win-pack.yml"
+  #push:
+  #  paths:
+  #    - ".github/workflows/win-pack.yml"
   pull_request:
     paths:
       - ".github/workflows/win-pack.yml"
@@ -56,11 +56,11 @@ on:
       include_office_payload:
         description: "Bundle Office offline payload into image (large size impact)"
         required: true
-        default: "false"
+        default: "true"
         type: choice
         options:
-          - "false"
           - "true"
+          - "false"
 
 jobs:
   pack:
@@ -359,6 +359,12 @@ jobs:
             }
           }
 
+          # Keep only Office\Data payload; explicitly remove original IMG from offline source.
+          if (Test-Path $officeImgLocal) {
+            Remove-Item -Path $officeImgLocal -Force -ErrorAction SilentlyContinue
+            Write-Host "Removed source Office IMG to avoid injecting it into WIM."
+          }
+
       - name: Download extra installers
         shell: pwsh
         env:
@@ -508,6 +514,11 @@ jobs:
 
             $offlineSrc = "$root\office-offline"
             if (Test-Path $offlineSrc) {
+              $offlineImg = Join-Path $offlineSrc "O365ProPlusRetail.img"
+              if (Test-Path $offlineImg) {
+                Remove-Item -Path $offlineImg -Force -ErrorAction SilentlyContinue
+                Write-Host "Removed Office IMG from offline source: $offlineImg"
+              }
               # Only inject Office\Data payload; avoid copying large source IMG into the OS image.
               $offlineDataSrc = Join-Path $offlineSrc "Office\Data"
               if (Test-Path $offlineDataSrc) {
@@ -572,7 +583,15 @@ jobs:
           $lines.Add("echo [win-pack] start SetupComplete")
           $lines.Add("set ARGS=$($env:SOFTWARE_SILENT_ARGS)")
           $lines.Add("")
-          $lines.Add("echo [win-pack] Office files copied only; no Office auto-install in SetupComplete for boot stability.")
+          $lines.Add("if exist ""%SystemDrive%\Install\Office\Office Tool Plus.exe"" (")
+          $lines.Add("  echo [win-pack] Checking Office offline files...")
+          $lines.Add("  if exist ""%SystemDrive%\Install\Office\Offline\Office\Data\*"" (")
+          $lines.Add("    echo [win-pack] Installing Office from offline source...")
+          $lines.Add('    start /wait "" "%SystemDrive%\Install\Office\Office Tool Plus.exe" deploy /add O365ProPlusRetail_zh-cn /O365ProPlusRetail.exclapps Access,OneDrive,OneNote,Outlook,Publisher,Teams,Groove /srcpath "%SystemDrive%\Install\Office\Offline" /channel Current /edition 64 /ver Latest /display false /acpteula')
+          $lines.Add("  ) else (")
+          $lines.Add("    echo [win-pack] Office offline files missing, skip Office install.")
+          $lines.Add("  )")
+          $lines.Add(")")
           $lines.Add("")
           $lines.Add("for %%F in (""%SystemDrive%\Install\*"") do (")
           $lines.Add("  if /I ""%%~xF""=="".msi"" (")
