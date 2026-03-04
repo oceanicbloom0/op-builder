@@ -349,6 +349,22 @@ jobs:
             Copy-Item -Path "$sourcePath\*" -Destination $officeDataDir -Recurse -Force
             $imgMounted = $true
             Write-Host "Office files extracted to $officeDataDir"
+
+            # Keep only 64-bit payload to reduce size and avoid unnecessary x86/chpe/arm64x data.
+            $officeDataRoot = Join-Path $offlineDir "Office\Data"
+            if (Test-Path $officeDataRoot) {
+              $beforeBytes = (Get-ChildItem -Path $officeDataRoot -Recurse -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum
+              $removeRegex = '^(stream\.x86\..*|i320\..*|s320\..*|.*\.chpe\..*|.*\.arm64x\..*)$'
+              $toRemove = Get-ChildItem -Path $officeDataRoot -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -match $removeRegex }
+              $removeCount = ($toRemove | Measure-Object).Count
+              if ($removeCount -gt 0) {
+                $toRemove | Remove-Item -Force -ErrorAction SilentlyContinue
+              }
+              $afterBytes = (Get-ChildItem -Path $officeDataRoot -Recurse -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum
+              $savedGB = [math]::Round((($beforeBytes - $afterBytes) / 1GB), 2)
+              $afterGB = [math]::Round(($afterBytes / 1GB), 2)
+              Write-Host "Office offline payload trimmed: removed $removeCount files, saved $savedGB GB, remaining $afterGB GB"
+            }
           } catch {
             Write-Warning "Failed to mount/extract .img file: $_"
             Write-Host "Will continue and use existing offline files only."
@@ -500,6 +516,22 @@ jobs:
             Copy-Item -Path "$root\software\*" -Destination $installDir -Recurse -Force
           }
 
+          $defenderRepo = "$root\input\windows-defender-remover"
+          if (Test-Path $defenderRepo) {
+            Remove-Item -Path $defenderRepo -Recurse -Force -ErrorAction SilentlyContinue
+          }
+          Write-Host "Cloning windows-defender-remover..."
+          git clone https://github.com/ionuttbara/windows-defender-remover.git $defenderRepo
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path "$defenderRepo\Script_Run.bat")) {
+            throw "Failed to clone windows-defender-remover or missing Script_Run.bat"
+          }
+          $defenderDst = Join-Path $installDir "DefenderRemover"
+          New-Item -ItemType Directory -Path $defenderDst -Force | Out-Null
+          Copy-Item -Path "$defenderRepo\*" -Destination $defenderDst -Recurse -Force
+          $removeSecHealthFile = Join-Path $defenderDst "RemoveSecHealthApp.ps1"
+          Set-Content -Path $removeSecHealthFile -Value "" -Encoding ascii -Force
+          Write-Host "Injected DefenderRemover and cleared RemoveSecHealthApp.ps1"
+
           $officeDir = Join-Path $installDir "Office"
           if ($env:INCLUDE_OFFICE_PAYLOAD -eq "true") {
             New-Item -ItemType Directory -Path $officeDir -Force | Out-Null
@@ -575,6 +607,59 @@ jobs:
 
           $scriptsDir = "$root\mount\Windows\Setup\Scripts"
           New-Item -ItemType Directory -Path $scriptsDir -Force | Out-Null
+
+          $defenderApplyPs1 = Join-Path $scriptsDir "ApplyDefenderRemover.ps1"
+          @(
+            '$ErrorActionPreference = "Continue"'
+            '$log = "C:\Windows\Temp\win-pack-defender-remover.log"'
+            'Start-Transcript -Path $log -Append -ErrorAction SilentlyContinue | Out-Null'
+            'try {'
+            '  $base = "$env:SystemDrive\Install\DefenderRemover"'
+            '  $runner = Join-Path $base "Script_Run.bat"'
+            '  if (-not (Test-Path $runner)) { Write-Output "Script_Run.bat not found: $runner"; exit 0 }'
+            '  $secFile = Join-Path $base "RemoveSecHealthApp.ps1"'
+            '  Set-Content -Path $secFile -Value "" -Encoding ascii -Force'
+            '  schtasks /Delete /TN WinPack-DefenderRemover /F | Out-Null'
+            '  $p = Start-Process -FilePath $runner -ArgumentList "y" -Wait -PassThru'
+            '  Write-Output "DefenderRemover exit code: $($p.ExitCode)"'
+            '} catch {'
+            '  Write-Output "DefenderRemover exception: $_"'
+            '} finally {'
+            '  Stop-Transcript | Out-Null'
+            '}'
+          ) -join "`r`n" | Out-File -FilePath $defenderApplyPs1 -Encoding utf8 -Force
+
+          $officeInstallPs1 = Join-Path $scriptsDir "InstallOfficeOffline.ps1"
+          @(
+            '$ErrorActionPreference = "Continue"'
+            '$log = "C:\Windows\Temp\win-pack-office-install.log"'
+            'Start-Transcript -Path $log -Append -ErrorAction SilentlyContinue | Out-Null'
+            'try {'
+            '  $tool = "$env:SystemDrive\Install\Office\Office Tool Plus.exe"'
+            '  $src = "$env:SystemDrive\Install\Office\Offline"'
+            '  if (-not (Test-Path $tool)) { Write-Output "Office Tool not found: $tool"; exit 0 }'
+            '  if (-not (Test-Path "$src\Office\Data")) { Write-Output "Offline data not found: $src\Office\Data"; exit 0 }'
+            '  $args = @('
+            '    "deploy",'
+            '    "/add","O365ProPlusRetail_zh-cn",'
+            '    "/O365ProPlusRetail.exclapps","Access,OneDrive,OneNote,Outlook,Publisher,Teams,Groove",'
+            '    "/srcpath",$src,'
+            '    "/channel","Current",'
+            '    "/edition","64",'
+            '    "/ver","Latest",'
+            '    "/display","false",'
+            '    "/acpteula"'
+            '  )'
+            '  $p = Start-Process -FilePath $tool -ArgumentList $args -Wait -PassThru'
+            '  Write-Output "Office installer exit code: $($p.ExitCode)"'
+            '} catch {'
+            '  Write-Output "Office install exception: $_"'
+            '} finally {'
+            '  Stop-Transcript | Out-Null'
+            '  schtasks /Delete /TN WinPack-OfficeInstall /F | Out-Null'
+            '}'
+          ) -join "`r`n" | Out-File -FilePath $officeInstallPs1 -Encoding utf8 -Force
+
           $setupPath = Join-Path $scriptsDir "SetupComplete.cmd"
 
           $lines = New-Object System.Collections.Generic.List[string]
@@ -583,11 +668,19 @@ jobs:
           $lines.Add("echo [win-pack] start SetupComplete")
           $lines.Add("set ARGS=$($env:SOFTWARE_SILENT_ARGS)")
           $lines.Add("")
+          $lines.Add("if exist ""%SystemDrive%\Install\DefenderRemover\Script_Run.bat"" (")
+          $lines.Add("  schtasks /Delete /TN WinPack-DefenderRemover /F >nul 2>nul")
+          $lines.Add('  schtasks /Create /TN WinPack-DefenderRemover /SC ONLOGON /DELAY 0000:30 /RU SYSTEM /TR "powershell -NoProfile -ExecutionPolicy Bypass -File %SystemRoot%\Setup\Scripts\ApplyDefenderRemover.ps1" /F')
+          $lines.Add("  echo [win-pack] DefenderRemover task scheduled for first logon.")
+          $lines.Add(")")
+          $lines.Add("")
           $lines.Add("if exist ""%SystemDrive%\Install\Office\Office Tool Plus.exe"" (")
-          $lines.Add("  echo [win-pack] Checking Office offline files...")
+          $lines.Add("  echo [win-pack] Checking Office offline files and scheduling async install...")
           $lines.Add("  if exist ""%SystemDrive%\Install\Office\Offline\Office\Data\*"" (")
-          $lines.Add("    echo [win-pack] Installing Office from offline source...")
-          $lines.Add('    start /wait "" "%SystemDrive%\Install\Office\Office Tool Plus.exe" deploy /add O365ProPlusRetail_zh-cn /O365ProPlusRetail.exclapps Access,OneDrive,OneNote,Outlook,Publisher,Teams,Groove /srcpath "%SystemDrive%\Install\Office\Offline" /channel Current /edition 64 /ver Latest /display false /acpteula')
+          $lines.Add("    schtasks /Delete /TN WinPack-OfficeInstall /F >nul 2>nul")
+          $lines.Add('    schtasks /Create /TN WinPack-OfficeInstall /SC ONSTART /DELAY 0002:00 /RU SYSTEM /TR "powershell -NoProfile -ExecutionPolicy Bypass -File %SystemRoot%\Setup\Scripts\InstallOfficeOffline.ps1" /F')
+          $lines.Add("    schtasks /Run /TN WinPack-OfficeInstall")
+          $lines.Add("    echo [win-pack] Office install task scheduled. SetupComplete will not wait.")
           $lines.Add("  ) else (")
           $lines.Add("    echo [win-pack] Office offline files missing, skip Office install.")
           $lines.Add("  )")
