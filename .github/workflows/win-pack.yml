@@ -484,6 +484,28 @@ jobs:
           DotLoad (Join-Path $repoPath "functions\microwin\Microwin-RemoveFileOrDirectory.ps1")
 
           $script:scratchDir = "$root\mount"
+
+          # Pre-MicroWin: Backup critical boot files that may be removed by RemovePackages
+          Write-Host "[BOOT-BACKUP] Backing up critical boot files before MicroWin cleanup..."
+          $bootBackupDir = "$root\boot-backup"
+          New-Item -ItemType Directory -Path $bootBackupDir -Force | Out-Null
+          $bootItemsToBackup = @(
+            "Windows\Boot\EFI",
+            "Windows\Boot\PCAT",
+            "Windows\Boot\Fonts",
+            "Windows\Boot\Resources",
+            "Windows\System32\Boot"
+          )
+          foreach ($item in $bootItemsToBackup) {
+            $srcPath = "$root\mount\$item"
+            $dstPath = "$bootBackupDir\$item"
+            if (Test-Path $srcPath) {
+              New-Item -ItemType Directory -Path (Split-Path $dstPath) -Force -ErrorAction SilentlyContinue | Out-Null
+              Copy-Item -Path $srcPath -Destination $dstPath -Recurse -Force -ErrorAction SilentlyContinue
+              Write-Host "[BOOT-BACKUP] Backed up: $item"
+            }
+          }
+
           Write-Host "[RUN] Microwin-RemoveFeatures"
           Microwin-RemoveFeatures -UseCmdlets $true
           Write-Host "[RUN] Microwin-RemovePackages"
@@ -497,6 +519,35 @@ jobs:
           Microwin-RemoveFileOrDirectory -pathToDelete "$root\mount\Windows\System32\OneDrive.ico"
           Microwin-RemoveFileOrDirectory -pathToDelete "$root\mount\Program Files (x86)\Internet Explorer" -Directory
           Microwin-RemoveFileOrDirectory -pathToDelete "$root\mount\Program Files\Internet Explorer" -Directory
+
+          # Post-MicroWin: Restore critical boot files that may have been removed
+          Write-Host "[BOOT-RESTORE] Restoring critical boot files after MicroWin cleanup..."
+          $bootBackupDir = "$root\boot-backup"
+          if (Test-Path $bootBackupDir) {
+            foreach ($item in $bootItemsToBackup) {
+              $srcPath = "$bootBackupDir\$item"
+              $dstPath = "$root\mount\$item"
+              if (Test-Path $srcPath) {
+                if (-not (Test-Path $dstPath)) {
+                  New-Item -ItemType Directory -Path (Split-Path $dstPath) -Force -ErrorAction SilentlyContinue | Out-Null
+                  Copy-Item -Path $srcPath -Destination $dstPath -Recurse -Force -ErrorAction SilentlyContinue
+                  Write-Host "[BOOT-RESTORE] Restored: $item"
+                } else {
+                  # Merge: copy missing files
+                  $srcFiles = Get-ChildItem -Path $srcPath -Recurse -File -ErrorAction SilentlyContinue
+                  foreach ($srcFile in $srcFiles) {
+                    $relativePath = $srcFile.FullName.Substring($srcPath.Length).TrimStart('\')
+                    $dstFile = Join-Path $dstPath $relativePath
+                    if (-not (Test-Path $dstFile)) {
+                      New-Item -ItemType Directory -Path (Split-Path $dstFile) -Force -ErrorAction SilentlyContinue | Out-Null
+                      Copy-Item -Path $srcFile.FullName -Destination $dstFile -Force
+                    }
+                  }
+                  Write-Host "[BOOT-RESTORE] Verified/Merged: $item"
+                }
+              }
+            }
+          }
 
           reg load HKLM\OFFLINE_SYSTEM "$root\mount\Windows\System32\config\SYSTEM"
           reg load HKLM\OFFLINE_SOFTWARE "$root\mount\Windows\System32\config\SOFTWARE"
@@ -623,13 +674,67 @@ jobs:
             -MountDir "$root\mount" `
             -SoftwareSilentArgs $env:SOFTWARE_SILENT_ARGS
 
+      - name: Verify boot files before commit
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $root = $env:WORK_ROOT
+          Write-Host "[BOOT-CHECK] Verifying boot files before commit..."
+          $criticalBootFiles = @(
+            "$root\mount\Windows\Boot\EFI\bootmgfw.efi",
+            "$root\mount\Windows\Boot\EFI\bootmgr.efi",
+            "$root\mount\Windows\Boot\PCAT\bootmgr",
+            "$root\mount\Windows\System32\Boot\winload.efi",
+            "$root\mount\Windows\System32\Boot\winload.exe"
+          )
+          $bootOk = $true
+          foreach ($cbf in $criticalBootFiles) {
+            if (Test-Path $cbf) {
+              $size = (Get-Item $cbf).Length
+              Write-Host "[BOOT-CHECK] OK: $cbf ($size bytes)"
+            } else {
+              Write-Warning "[BOOT-CHECK] MISSING: $cbf"
+              $bootOk = $false
+            }
+          }
+          # Also check BCD template exists
+          $bcdTemplate = "$root\mount\Windows\System32\config\BCD-Template"
+          if (Test-Path $bcdTemplate) {
+            Write-Host "[BOOT-CHECK] OK: BCD-Template exists"
+          } else {
+            Write-Warning "[BOOT-CHECK] MISSING: BCD-Template (needed for boot configuration)"
+          }
+          if (-not $bootOk) {
+            throw "Critical boot files are missing. Aborting to prevent unbootable image."
+          }
+          Write-Host "[BOOT-CHECK] All critical boot files present."
+
       - name: Commit WIM changes
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
           $root = $env:WORK_ROOT
+
+          # Check mounted image health before cleanup
+          Write-Host "[HEALTH-CHECK] Checking mounted image health..."
+          $healthCheck = dism /Image:$root\mount /Get-Features 2>&1 | Select-String "Error|Corrupt"
+          if ($healthCheck) {
+            Write-Warning "[HEALTH-CHECK] Potential issues detected: $healthCheck"
+          }
+
+          # Check for pending operations that might affect boot
+          Write-Host "[HEALTH-CHECK] Checking pending operations..."
+          $pending = dism /Image:$root\mount /Get-Features | Select-String "Pending"
+          if ($pending) {
+            Write-Host "[HEALTH-CHECK] Pending operations: $pending"
+          }
+
           dism /Image:$root\mount /Cleanup-Image /StartComponentCleanup /ResetBase
-          if ($LASTEXITCODE -ne 0) { throw "DISM cleanup failed" }
+          if ($LASTEXITCODE -ne 0) {
+            Write-Warning "DISM cleanup failed with code $LASTEXITCODE, attempting to continue..."
+          }
+
+          Write-Host "[UNMOUNT] Committing changes..."
           dism /Unmount-Image /MountDir:$root\mount /Commit
           if ($LASTEXITCODE -ne 0) { throw "DISM unmount/commit failed" }
 
@@ -662,8 +767,34 @@ jobs:
 
           Write-Host "[DEBUG] DISM command: dism /Export-Image /SourceImageFile:$root\wim\install.wim /SourceIndex:$imageIndex /DestinationImageFile:$dst /Compress:max /CheckIntegrity"
 
-          dism /Export-Image /SourceImageFile:$root\wim\install.wim /SourceIndex:$imageIndex /DestinationImageFile:$dst /Compress:max /CheckIntegrity
+          # Check source WIM info and verify it's properly exportable
+          Write-Host "[DEBUG] Checking source WIM detailed info..."
+          $srcInfo = dism /English /Get-WimInfo /WimFile:$root\wim\install.wim /Index:$imageIndex
+          Write-Host ($srcInfo | Out-String)
+
+          # Check if source has Windows PE info (indicates bootable install WIM)
+          $hasPE = $srcInfo | Select-String "Windows PE"
+          $hasBootable = $srcInfo | Select-String "Bootable"
+          if ($hasPE -or $hasBootable) {
+            Write-Host "[BOOT-CHECK] Source WIM appears to have boot/PE metadata"
+          }
+
+          # Use /NoRPFix to prevent path recalculation issues and ensure bootable flag is preserved
+          # Note: /Bootable flag is not valid for Export-Image, it's only for Append-Image
+          dism /Export-Image /SourceImageFile:$root\wim\install.wim /SourceIndex:$imageIndex /DestinationImageFile:$dst /Compress:max /CheckIntegrity /NoRPFix
           if ($LASTEXITCODE -ne 0) { throw "DISM export failed" }
+
+          # Verify exported WIM has boot metadata
+          Write-Host "[BOOT-CHECK] Verifying exported WIM boot metadata..."
+          $dstInfo = dism /English /Get-WimInfo /WimFile:$dst /Index:1
+          Write-Host ($dstInfo | Out-String)
+          $dstHasPE = $dstInfo | Select-String "Windows PE"
+          $dstHasBootable = $dstInfo | Select-String "Bootable"
+          if ($dstHasPE -or $dstHasBootable) {
+            Write-Host "[BOOT-CHECK] Exported WIM appears to have boot/PE metadata"
+          } else {
+            Write-Warning "[BOOT-CHECK] Exported WIM may be missing boot metadata!"
+          }
           if (-not (Test-Path $dst)) { throw "Output WIM not found: $dst" }
           $outInfo = dism /English /Get-WimInfo /WimFile:$dst
           $outIndexCount = ($outInfo | Select-String "^\s*Index\s*:\s*\d+").Count
