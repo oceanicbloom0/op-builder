@@ -83,7 +83,7 @@ jobs:
           New-Item -ItemType Directory -Path "$root\office-offline" -Force | Out-Null
           New-Item -ItemType Directory -Path "$root\output" -Force | Out-Null
 
-      - name: Clone ssh-libs repo
+      - name: Clone ext-repo repo
         shell: pwsh
         env:
           ACTION_RSA: ${{ secrets.ACTION_RSA }}
@@ -101,7 +101,7 @@ jobs:
           icacls $sshPath /c /t /remove:g "Administrator" "Authenticated Users" "Users" "Everyone" | Out-Null
           git config --global core.sshCommand "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 
-          $sshLibsDir = "$root\ssh-libs"
+          $sshLibsDir = "$root\ext-repo"
           New-Item -ItemType Directory -Path $sshLibsDir -Force | Out-Null
           Set-Location $sshLibsDir
           git init
@@ -114,7 +114,7 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $root = $env:WORK_ROOT
-          $proIndexScript = "$root\ssh-libs\win\Get-ProEditionIndex.ps1"
+          $proIndexScript = "$root\ext-repo\win\Get-ProEditionIndex.ps1"
           if (-not (Test-Path $proIndexScript)) {
             throw "Get-ProEditionIndex.ps1 not found: $proIndexScript"
           }
@@ -124,7 +124,7 @@ jobs:
           }
           Write-Host "Pro index script self-test passed."
 
-          $injectScript = "$root\ssh-libs\win\Inject-DefenderRemover.ps1"
+          $injectScript = "$root\ext-repo\win\Inject-DefenderRemover.ps1"
           if (-not (Test-Path $injectScript)) {
             throw "Inject-DefenderRemover.ps1 not found: $injectScript"
           }
@@ -134,7 +134,7 @@ jobs:
           }
           Write-Host "Inject-DefenderRemover script self-test passed."
 
-          $writeScript = "$root\ssh-libs\win\Write-SetupComplete.ps1"
+          $writeScript = "$root\ext-repo\win\Write-SetupComplete.ps1"
           if (-not (Test-Path $writeScript)) {
             throw "Write-SetupComplete.ps1 not found: $writeScript"
           }
@@ -154,7 +154,7 @@ jobs:
           $root = $env:WORK_ROOT
           $imageIndex = if ([string]::IsNullOrWhiteSpace($env:IMAGE_INDEX)) { "1" } else { $env:IMAGE_INDEX }
           $sourceLocal = "$root\input\source_image.iso"
-          $proIndexScript = "$root\ssh-libs\win\Get-ProEditionIndex.ps1"
+          $proIndexScript = "$root\ext-repo\win\Get-ProEditionIndex.ps1"
 
           $linksPage = "https://massgrave.dev/windows_11_links"
           Write-Host "Resolving Win11 25H2 x64 zh-cn official ISO URL from $linksPage ..."
@@ -255,7 +255,7 @@ jobs:
             throw "install.wim not found for index selection."
           }
 
-          $proIndexScript = "$root\ssh-libs\win\Get-ProEditionIndex.ps1"
+          $proIndexScript = "$root\ext-repo\win\Get-ProEditionIndex.ps1"
           if (-not (Test-Path $proIndexScript)) {
             throw "Get-ProEditionIndex.ps1 not found: $proIndexScript"
           }
@@ -525,7 +525,7 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $root = $env:WORK_ROOT
-          & "$root\ssh-libs\win\Inject-DefenderRemover.ps1" `
+          & "$root\ext-repo\win\Inject-DefenderRemover.ps1" `
             -MountDir "$root\mount" `
             -WorkDir "$root\input"
 
@@ -619,7 +619,7 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $root = $env:WORK_ROOT
-          & "$root\ssh-libs\win\Write-SetupComplete.ps1" `
+          & "$root\ext-repo\win\Write-SetupComplete.ps1" `
             -MountDir "$root\mount" `
             -SoftwareSilentArgs $env:SOFTWARE_SILENT_ARGS
 
