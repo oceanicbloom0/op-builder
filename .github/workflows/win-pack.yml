@@ -124,6 +124,26 @@ jobs:
           }
           Write-Host "Pro index script self-test passed."
 
+          $injectScript = "$root\ssh-libs\win\Inject-DefenderRemover.ps1"
+          if (-not (Test-Path $injectScript)) {
+            throw "Inject-DefenderRemover.ps1 not found: $injectScript"
+          }
+          $result = (& $injectScript -SelfTest | Out-String).Trim()
+          if ($result -ne "OK") {
+            throw "Self-test failed, expected OK but got: '$result'"
+          }
+          Write-Host "Inject-DefenderRemover script self-test passed."
+
+          $writeScript = "$root\ssh-libs\win\Write-SetupComplete.ps1"
+          if (-not (Test-Path $writeScript)) {
+            throw "Write-SetupComplete.ps1 not found: $writeScript"
+          }
+          $result = (& $writeScript -SelfTest | Out-String).Trim()
+          if ($result -ne "OK") {
+            throw "Self-test failed, expected OK but got: '$result'"
+          }
+          Write-Host "Write-SetupComplete script self-test passed."
+
       - name: Acquire source image
         shell: pwsh
         env:
@@ -500,37 +520,28 @@ jobs:
       #     $root = $env:WORK_ROOT
       #     Write-Host "[DEBUG] Skipping registry modifications for testing"
 
-      - name: Inject Office Tool, extra installers, and SetupComplete
+      - name: Inject DefenderRemover
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $root = $env:WORK_ROOT
+          & "$root\ssh-libs\win\Inject-DefenderRemover.ps1" `
+            -MountDir "$root\mount" `
+            -WorkDir "$root\input"
+
+      - name: Inject Office, extra installers, and unattend
         shell: pwsh
         env:
-          SOFTWARE_SILENT_ARGS: ${{ github.event.inputs.software_silent_args }}
           INCLUDE_OFFICE_PAYLOAD: ${{ github.event.inputs.include_office_payload }}
         run: |
           $ErrorActionPreference = "Stop"
           $root = $env:WORK_ROOT
-
           $installDir = "$root\mount\Install"
           New-Item -ItemType Directory -Path $installDir -Force | Out-Null
 
           if (Test-Path "$root\software\*") {
             Copy-Item -Path "$root\software\*" -Destination $installDir -Recurse -Force
           }
-
-          $defenderRepo = "$root\input\windows-defender-remover"
-          if (Test-Path $defenderRepo) {
-            Remove-Item -Path $defenderRepo -Recurse -Force -ErrorAction SilentlyContinue
-          }
-          Write-Host "Cloning windows-defender-remover..."
-          git clone https://github.com/ionuttbara/windows-defender-remover.git $defenderRepo
-          if ($LASTEXITCODE -ne 0 -or -not (Test-Path "$defenderRepo\Script_Run.bat")) {
-            throw "Failed to clone windows-defender-remover or missing Script_Run.bat"
-          }
-          $defenderDst = Join-Path $installDir "DefenderRemover"
-          New-Item -ItemType Directory -Path $defenderDst -Force | Out-Null
-          Copy-Item -Path "$defenderRepo\*" -Destination $defenderDst -Recurse -Force
-          $removeSecHealthFile = Join-Path $defenderDst "RemoveSecHealthApp.ps1"
-          Set-Content -Path $removeSecHealthFile -Value "" -Encoding ascii -Force
-          Write-Host "Injected DefenderRemover and cleared RemoveSecHealthApp.ps1"
 
           $officeDir = Join-Path $installDir "Office"
           if ($env:INCLUDE_OFFICE_PAYLOAD -eq "true") {
@@ -549,9 +560,7 @@ jobs:
               $offlineImg = Join-Path $offlineSrc "O365ProPlusRetail.img"
               if (Test-Path $offlineImg) {
                 Remove-Item -Path $offlineImg -Force -ErrorAction SilentlyContinue
-                Write-Host "Removed Office IMG from offline source: $offlineImg"
               }
-              # Only inject Office\Data payload; avoid copying large source IMG into the OS image.
               $offlineDataSrc = Join-Path $offlineSrc "Office\Data"
               if (Test-Path $offlineDataSrc) {
                 $offlineDataDst = Join-Path $officeDir "Offline\Office\Data"
@@ -562,11 +571,7 @@ jobs:
                 Write-Warning "Office offline data path not found: $offlineDataSrc"
               }
             }
-          } else {
-            Write-Host "INCLUDE_OFFICE_PAYLOAD=false, skip Office payload injection."
-          }
 
-          if ($env:INCLUDE_OFFICE_PAYLOAD -eq "true") {
             $officeXml = Join-Path $officeDir "office-word-excel-ppt.xml"
             @(
               '<Configuration>'
@@ -586,6 +591,8 @@ jobs:
               '  <Property Name="FORCEAPPSHUTDOWN" Value="TRUE" />'
               '</Configuration>'
             ) -join "`r`n" | Out-File -FilePath $officeXml -Encoding utf8 -Force
+          } else {
+            Write-Host "INCLUDE_OFFICE_PAYLOAD=false, skip Office payload injection."
           }
 
           $pantherDir = "$root\mount\Windows\Panther"
@@ -605,101 +612,16 @@ jobs:
             '</unattend>'
           ) -join "`r`n" | Out-File -FilePath $unattendPath -Encoding utf8 -Force
 
-          $scriptsDir = "$root\mount\Windows\Setup\Scripts"
-          New-Item -ItemType Directory -Path $scriptsDir -Force | Out-Null
-
-          $defenderApplyPs1 = Join-Path $scriptsDir "ApplyDefenderRemover.ps1"
-          @(
-            '$ErrorActionPreference = "Continue"'
-            '$log = "C:\Windows\Temp\win-pack-defender-remover.log"'
-            'Start-Transcript -Path $log -Append -ErrorAction SilentlyContinue | Out-Null'
-            'try {'
-            '  $base = "$env:SystemDrive\Install\DefenderRemover"'
-            '  $runner = Join-Path $base "Script_Run.bat"'
-            '  if (-not (Test-Path $runner)) { Write-Output "Script_Run.bat not found: $runner"; exit 0 }'
-            '  $secFile = Join-Path $base "RemoveSecHealthApp.ps1"'
-            '  Set-Content -Path $secFile -Value "" -Encoding ascii -Force'
-            '  schtasks /Delete /TN WinPack-DefenderRemover /F | Out-Null'
-            '  $p = Start-Process -FilePath $runner -ArgumentList "y" -Wait -PassThru'
-            '  Write-Output "DefenderRemover exit code: $($p.ExitCode)"'
-            '} catch {'
-            '  Write-Output "DefenderRemover exception: $_"'
-            '} finally {'
-            '  Stop-Transcript | Out-Null'
-            '}'
-          ) -join "`r`n" | Out-File -FilePath $defenderApplyPs1 -Encoding utf8 -Force
-
-          $officeInstallPs1 = Join-Path $scriptsDir "InstallOfficeOffline.ps1"
-          @(
-            '$ErrorActionPreference = "Continue"'
-            '$log = "C:\Windows\Temp\win-pack-office-install.log"'
-            'Start-Transcript -Path $log -Append -ErrorAction SilentlyContinue | Out-Null'
-            'try {'
-            '  $tool = "$env:SystemDrive\Install\Office\Office Tool Plus.exe"'
-            '  $src = "$env:SystemDrive\Install\Office\Offline"'
-            '  if (-not (Test-Path $tool)) { Write-Output "Office Tool not found: $tool"; exit 0 }'
-            '  if (-not (Test-Path "$src\Office\Data")) { Write-Output "Offline data not found: $src\Office\Data"; exit 0 }'
-            '  $args = @('
-            '    "deploy",'
-            '    "/add","O365ProPlusRetail_zh-cn",'
-            '    "/O365ProPlusRetail.exclapps","Access,OneDrive,OneNote,Outlook,Publisher,Teams,Groove",'
-            '    "/srcpath",$src,'
-            '    "/channel","Current",'
-            '    "/edition","64",'
-            '    "/ver","Latest",'
-            '    "/display","false",'
-            '    "/acpteula"'
-            '  )'
-            '  $p = Start-Process -FilePath $tool -ArgumentList $args -Wait -PassThru'
-            '  Write-Output "Office installer exit code: $($p.ExitCode)"'
-            '} catch {'
-            '  Write-Output "Office install exception: $_"'
-            '} finally {'
-            '  Stop-Transcript | Out-Null'
-            '  schtasks /Delete /TN WinPack-OfficeInstall /F | Out-Null'
-            '}'
-          ) -join "`r`n" | Out-File -FilePath $officeInstallPs1 -Encoding utf8 -Force
-
-          $setupPath = Join-Path $scriptsDir "SetupComplete.cmd"
-
-          $lines = New-Object System.Collections.Generic.List[string]
-          $lines.Add("@echo off")
-          $lines.Add("setlocal EnableDelayedExpansion")
-          $lines.Add("echo [win-pack] start SetupComplete")
-          $lines.Add("set ARGS=$($env:SOFTWARE_SILENT_ARGS)")
-          $lines.Add("")
-          $lines.Add("if exist ""%SystemDrive%\Install\DefenderRemover\Script_Run.bat"" (")
-          $lines.Add("  schtasks /Delete /TN WinPack-DefenderRemover /F >nul 2>nul")
-          $lines.Add('  schtasks /Create /TN WinPack-DefenderRemover /SC ONLOGON /DELAY 0000:30 /RU SYSTEM /TR "powershell -NoProfile -ExecutionPolicy Bypass -File %SystemRoot%\Setup\Scripts\ApplyDefenderRemover.ps1" /F')
-          $lines.Add("  echo [win-pack] DefenderRemover task scheduled for first logon.")
-          $lines.Add(")")
-          $lines.Add("")
-          $lines.Add("if exist ""%SystemDrive%\Install\Office\Office Tool Plus.exe"" (")
-          $lines.Add("  echo [win-pack] Checking Office offline files and scheduling async install...")
-          $lines.Add("  if exist ""%SystemDrive%\Install\Office\Offline\Office\Data\*"" (")
-          $lines.Add("    schtasks /Delete /TN WinPack-OfficeInstall /F >nul 2>nul")
-          $lines.Add('    schtasks /Create /TN WinPack-OfficeInstall /SC ONSTART /DELAY 0002:00 /RU SYSTEM /TR "powershell -NoProfile -ExecutionPolicy Bypass -File %SystemRoot%\Setup\Scripts\InstallOfficeOffline.ps1" /F')
-          $lines.Add("    schtasks /Run /TN WinPack-OfficeInstall")
-          $lines.Add("    echo [win-pack] Office install task scheduled. SetupComplete will not wait.")
-          $lines.Add("  ) else (")
-          $lines.Add("    echo [win-pack] Office offline files missing, skip Office install.")
-          $lines.Add("  )")
-          $lines.Add(")")
-          $lines.Add("")
-          $lines.Add("for %%F in (""%SystemDrive%\Install\*"") do (")
-          $lines.Add("  if /I ""%%~xF""=="".msi"" (")
-          $lines.Add("    msiexec /i ""%%~fF"" !ARGS!")
-          $lines.Add("  ) else if /I ""%%~xF""=="".exe"" (")
-          $lines.Add("    start /wait """" ""%%~fF"" !ARGS!")
-          $lines.Add("  ) else if /I ""%%~xF""=="".ps1"" (")
-          $lines.Add("    powershell -ExecutionPolicy Bypass -File ""%%~fF""")
-          $lines.Add("  )")
-          $lines.Add(")")
-          $lines.Add("")
-          $lines.Add("echo [win-pack] SetupComplete finished")
-          $lines.Add("endlocal")
-
-          $lines | Out-File -FilePath $setupPath -Encoding ascii -Force
+      - name: Generate SetupComplete scripts
+        shell: pwsh
+        env:
+          SOFTWARE_SILENT_ARGS: ${{ github.event.inputs.software_silent_args }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $root = $env:WORK_ROOT
+          & "$root\ssh-libs\win\Write-SetupComplete.ps1" `
+            -MountDir "$root\mount" `
+            -SoftwareSilentArgs $env:SOFTWARE_SILENT_ARGS
 
       - name: Commit WIM changes
         shell: pwsh
