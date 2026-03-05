@@ -61,6 +61,14 @@ on:
         options:
           - "true"
           - "false"
+      test_wim_installation:
+        description: "Test WIM installation using QEMU/KVM on Linux runner (slower)"
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
 
 jobs:
   pack:
@@ -143,6 +151,36 @@ jobs:
             throw "Self-test failed, expected OK but got: '$result'"
           }
           Write-Host "Write-SetupComplete script self-test passed."
+
+          $protectScript = "$root\ext-repo\win\Protect-BootFiles.ps1"
+          if (-not (Test-Path $protectScript)) {
+            throw "Protect-BootFiles.ps1 not found: $protectScript"
+          }
+          $result = (& $protectScript -SelfTest | Out-String).Trim()
+          if ($result -ne "OK") {
+            throw "Self-test failed, expected OK but got: '$result'"
+          }
+          Write-Host "Protect-BootFiles script self-test passed."
+
+          $testBootScript = "$root\ext-repo\win\Test-BootFiles.ps1"
+          if (-not (Test-Path $testBootScript)) {
+            throw "Test-BootFiles.ps1 not found: $testBootScript"
+          }
+          $result = (& $testBootScript -SelfTest | Out-String).Trim()
+          if ($result -ne "OK") {
+            throw "Self-test failed, expected OK but got: '$result'"
+          }
+          Write-Host "Test-BootFiles script self-test passed."
+
+          $testWimScript = "$root\ext-repo\win\Test-WimInstallation.ps1"
+          if (-not (Test-Path $testWimScript)) {
+            throw "Test-WimInstallation.ps1 not found: $testWimScript"
+          }
+          $result = (& $testWimScript -SelfTest | Out-String).Trim()
+          if ($result -ne "OK") {
+            throw "Self-test failed, expected OK but got: '$result'"
+          }
+          Write-Host "Test-WimInstallation script self-test passed."
 
       - name: Acquire source image
         shell: pwsh
@@ -284,6 +322,81 @@ jobs:
           $exe = Get-ChildItem -Path "$root\office-tool" -Recurse -Filter "Office Tool Plus.exe" | Select-Object -First 1
           if (-not $exe) { throw "Office Tool Plus.exe not found in extracted files." }
           "OFFICE_TOOL_EXE=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Download Office Deployment Tool (ODT)
+        if: ${{ github.event.inputs.include_office_payload == 'true' }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $root = $env:WORK_ROOT
+          $odtDir = "$root\odt"
+          New-Item -ItemType Directory -Path $odtDir -Force | Out-Null
+
+          Write-Host "Downloading Office Deployment Tool..."
+          $odtUrl = "https://download.microsoft.com/download/2/7/A/27AF1BE6-DD20-4CB4-B154-EBAB8A7D4A7E/officedeploymenttool_18129-20030.exe"
+          $odtInstaller = "$root\input\odt.exe"
+
+          # Download ODT using aria2 if available
+          $ariaDir = "$root\input\aria2"
+          $ariaExe = Get-ChildItem -Path $ariaDir -Recurse -Filter "aria2c.exe" | Select-Object -First 1
+          if ($ariaExe) {
+            & $ariaExe.FullName `
+              --allow-overwrite=true `
+              --continue=true `
+              --max-connection-per-server=8 `
+              --split=8 `
+              --dir="$root\input" `
+              --out="odt.exe" `
+              "$odtUrl"
+          } else {
+            Invoke-WebRequest -UseBasicParsing -Uri $odtUrl -OutFile $odtInstaller
+          }
+
+          if (-not (Test-Path $odtInstaller)) {
+            throw "ODT download failed"
+          }
+
+          # Extract ODT using self-extract (it's a self-extracting EXE)
+          # Try to use 7z if available, otherwise we'll extract setup.exe during injection
+          try {
+            # Extract directly using 7z if available in PATH
+            $sevenZip = Get-Command 7z -ErrorAction SilentlyContinue
+            if ($sevenZip) {
+              & 7z x "$odtInstaller" -o"$odtDir" -y
+            } else {
+              # Download 7z portable
+              $sevenZipUrl = "https://www.7-zip.org/a/7z2401-extra.7z"
+              $sevenZipArchive = "$root\input\7z-extra.7z"
+              Invoke-WebRequest -UseBasicParsing -Uri $sevenZipUrl -OutFile $sevenZipArchive -ErrorAction SilentlyContinue
+              if (Test-Path $sevenZipArchive) {
+                # We need 7z to extract 7z... try using Expand-Archive if it's a zip
+                # Otherwise, just try to run the ODT exe with /extract
+                Write-Host "Attempting to extract ODT using /extract switch..."
+                & $odtInstaller /extract:$odtDir /quiet
+              } else {
+                # Last resort: try /extract switch
+                & $odtInstaller /extract:$odtDir /quiet
+              }
+            }
+          } catch {
+            Write-Warning "ODT extraction failed, will try alternative method during injection: $_"
+          }
+
+          # Also try to download setup.exe directly as fallback
+          try {
+            $setupUrl = "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/zh-cn/setup.exe"
+            Invoke-WebRequest -UseBasicParsing -Uri $setupUrl -OutFile "$odtDir\setup.exe" -ErrorAction SilentlyContinue
+            Write-Host "Downloaded setup.exe directly"
+          } catch {
+            Write-Warning "Direct setup.exe download failed"
+          }
+
+          if (Test-Path "$odtDir\setup.exe") {
+            Write-Host "ODT setup.exe ready at: $odtDir\setup.exe"
+            "ODT_SETUP_PATH=$odtDir\setup.exe" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          } else {
+            Write-Warning "setup.exe not found in ODT directory"
+          }
 
       - name: Download Office offline files
         if: ${{ github.event.inputs.include_office_payload == 'true' }}
@@ -485,26 +598,8 @@ jobs:
 
           $script:scratchDir = "$root\mount"
 
-          # Pre-MicroWin: Backup critical boot files that may be removed by RemovePackages
-          Write-Host "[BOOT-BACKUP] Backing up critical boot files before MicroWin cleanup..."
-          $bootBackupDir = "$root\boot-backup"
-          New-Item -ItemType Directory -Path $bootBackupDir -Force | Out-Null
-          $bootItemsToBackup = @(
-            "Windows\Boot\EFI",
-            "Windows\Boot\PCAT",
-            "Windows\Boot\Fonts",
-            "Windows\Boot\Resources",
-            "Windows\System32\Boot"
-          )
-          foreach ($item in $bootItemsToBackup) {
-            $srcPath = "$root\mount\$item"
-            $dstPath = "$bootBackupDir\$item"
-            if (Test-Path $srcPath) {
-              New-Item -ItemType Directory -Path (Split-Path $dstPath) -Force -ErrorAction SilentlyContinue | Out-Null
-              Copy-Item -Path $srcPath -Destination $dstPath -Recurse -Force -ErrorAction SilentlyContinue
-              Write-Host "[BOOT-BACKUP] Backed up: $item"
-            }
-          }
+          # Pre-MicroWin: Backup critical boot files
+          & "$root\ext-repo\win\Protect-BootFiles.ps1" -Action Backup -MountDir "$root\mount" -BackupDir "$root\boot-backup"
 
           Write-Host "[RUN] Microwin-RemoveFeatures"
           Microwin-RemoveFeatures -UseCmdlets $true
@@ -520,34 +615,8 @@ jobs:
           Microwin-RemoveFileOrDirectory -pathToDelete "$root\mount\Program Files (x86)\Internet Explorer" -Directory
           Microwin-RemoveFileOrDirectory -pathToDelete "$root\mount\Program Files\Internet Explorer" -Directory
 
-          # Post-MicroWin: Restore critical boot files that may have been removed
-          Write-Host "[BOOT-RESTORE] Restoring critical boot files after MicroWin cleanup..."
-          $bootBackupDir = "$root\boot-backup"
-          if (Test-Path $bootBackupDir) {
-            foreach ($item in $bootItemsToBackup) {
-              $srcPath = "$bootBackupDir\$item"
-              $dstPath = "$root\mount\$item"
-              if (Test-Path $srcPath) {
-                if (-not (Test-Path $dstPath)) {
-                  New-Item -ItemType Directory -Path (Split-Path $dstPath) -Force -ErrorAction SilentlyContinue | Out-Null
-                  Copy-Item -Path $srcPath -Destination $dstPath -Recurse -Force -ErrorAction SilentlyContinue
-                  Write-Host "[BOOT-RESTORE] Restored: $item"
-                } else {
-                  # Merge: copy missing files
-                  $srcFiles = Get-ChildItem -Path $srcPath -Recurse -File -ErrorAction SilentlyContinue
-                  foreach ($srcFile in $srcFiles) {
-                    $relativePath = $srcFile.FullName.Substring($srcPath.Length).TrimStart('\')
-                    $dstFile = Join-Path $dstPath $relativePath
-                    if (-not (Test-Path $dstFile)) {
-                      New-Item -ItemType Directory -Path (Split-Path $dstFile) -Force -ErrorAction SilentlyContinue | Out-Null
-                      Copy-Item -Path $srcFile.FullName -Destination $dstFile -Force
-                    }
-                  }
-                  Write-Host "[BOOT-RESTORE] Verified/Merged: $item"
-                }
-              }
-            }
-          }
+          # Post-MicroWin: Restore critical boot files
+          & "$root\ext-repo\win\Protect-BootFiles.ps1" -Action Restore -MountDir "$root\mount" -BackupDir "$root\boot-backup"
 
           reg load HKLM\OFFLINE_SYSTEM "$root\mount\Windows\System32\config\SYSTEM"
           reg load HKLM\OFFLINE_SOFTWARE "$root\mount\Windows\System32\config\SOFTWARE"
@@ -598,14 +667,52 @@ jobs:
           if ($env:INCLUDE_OFFICE_PAYLOAD -eq "true") {
             New-Item -ItemType Directory -Path $officeDir -Force | Out-Null
 
+            # Copy ODT setup.exe if available
+            $odtDir = "$root\odt"
+            if (Test-Path "$odtDir\setup.exe") {
+              Copy-Item -Path "$odtDir\setup.exe" -Destination $officeDir -Force
+              Write-Host "Copied ODT setup.exe"
+            } else {
+              Write-Warning "ODT setup.exe not found, ODT installation will not be available"
+            }
+
+            # Create ODT config.xml (primary installation method)
+            $configXml = Join-Path $officeDir "config.xml"
+            @(
+              '<?xml version="1.0" encoding="UTF-8"?>'
+              '<Configuration>'
+              '  <Add OfficeClientEdition="64" Channel="Current">'
+              '    <Product ID="O365ProPlusRetail">'
+              '      <Language ID="zh-CN" />'
+              '      <ExcludeApp ID="Access" />'
+              '      <ExcludeApp ID="Bing" />'
+              '      <ExcludeApp ID="Groove" />'
+              '      <ExcludeApp ID="Lync" />'
+              '      <ExcludeApp ID="OneDrive" />'
+              '      <ExcludeApp ID="OneNote" />'
+              '      <ExcludeApp ID="Outlook" />'
+              '      <ExcludeApp ID="Publisher" />'
+              '      <ExcludeApp ID="Teams" />'
+              '    </Product>'
+              '  </Add>'
+              '  <Display Level="None" AcceptEULA="TRUE" />'
+              '  <Property Name="FORCEAPPSHUTDOWN" Value="TRUE" />'
+              '  <Property Name="SharedComputerLicensing" Value="0" />'
+              '  <Property Name="PinIconsToTaskbar" Value="FALSE" />'
+              '</Configuration>'
+            ) -join "`r`n" | Out-File -FilePath $configXml -Encoding utf8 -Force
+            Write-Host "Created ODT config.xml"
+
+            # Copy Office Tool Plus (fallback method)
             if (-not [string]::IsNullOrWhiteSpace($env:OFFICE_TOOL_EXE)) {
               $officeToolDir = Split-Path $env:OFFICE_TOOL_EXE -Parent
               if (Test-Path $officeToolDir) {
                 Copy-Item -Path "$officeToolDir\*" -Destination $officeDir -Recurse -Force
-                Write-Host "Copied Office Tool Plus files"
+                Write-Host "Copied Office Tool Plus files (fallback)"
               }
             }
 
+            # Copy offline data
             $offlineSrc = "$root\office-offline"
             if (Test-Path $offlineSrc) {
               $offlineImg = Join-Path $offlineSrc "O365ProPlusRetail.img"
@@ -623,6 +730,7 @@ jobs:
               }
             }
 
+            # Keep the old XML for compatibility (OTP fallback)
             $officeXml = Join-Path $officeDir "office-word-excel-ppt.xml"
             @(
               '<Configuration>'
@@ -642,6 +750,18 @@ jobs:
               '  <Property Name="FORCEAPPSHUTDOWN" Value="TRUE" />'
               '</Configuration>'
             ) -join "`r`n" | Out-File -FilePath $officeXml -Encoding utf8 -Force
+
+            # Verify what we have
+            Write-Host "--- Office Directory Contents ---"
+            Get-ChildItem $officeDir -Recurse | ForEach-Object {
+              $relPath = $_.FullName.Replace($officeDir, "")
+              if ($_.PSIsContainer) {
+                Write-Host "DIR:  $relPath"
+              } else {
+                Write-Host "FILE: $relPath ($([math]::Round($_.Length/1KB,2)) KB)"
+              }
+            }
+            Write-Host "--------------------------------"
           } else {
             Write-Host "INCLUDE_OFFICE_PAYLOAD=false, skip Office payload injection."
           }
@@ -679,35 +799,7 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $root = $env:WORK_ROOT
-          Write-Host "[BOOT-CHECK] Verifying boot files before commit..."
-          $criticalBootFiles = @(
-            "$root\mount\Windows\Boot\EFI\bootmgfw.efi",
-            "$root\mount\Windows\Boot\EFI\bootmgr.efi",
-            "$root\mount\Windows\Boot\PCAT\bootmgr",
-            "$root\mount\Windows\System32\Boot\winload.efi",
-            "$root\mount\Windows\System32\Boot\winload.exe"
-          )
-          $bootOk = $true
-          foreach ($cbf in $criticalBootFiles) {
-            if (Test-Path $cbf) {
-              $size = (Get-Item $cbf).Length
-              Write-Host "[BOOT-CHECK] OK: $cbf ($size bytes)"
-            } else {
-              Write-Warning "[BOOT-CHECK] MISSING: $cbf"
-              $bootOk = $false
-            }
-          }
-          # Also check BCD template exists
-          $bcdTemplate = "$root\mount\Windows\System32\config\BCD-Template"
-          if (Test-Path $bcdTemplate) {
-            Write-Host "[BOOT-CHECK] OK: BCD-Template exists"
-          } else {
-            Write-Warning "[BOOT-CHECK] MISSING: BCD-Template (needed for boot configuration)"
-          }
-          if (-not $bootOk) {
-            throw "Critical boot files are missing. Aborting to prevent unbootable image."
-          }
-          Write-Host "[BOOT-CHECK] All critical boot files present."
+          & "$root\ext-repo\win\Test-BootFiles.ps1" -MountDir "$root\mount"
 
       - name: Commit WIM changes
         shell: pwsh
@@ -779,9 +871,7 @@ jobs:
             Write-Host "[BOOT-CHECK] Source WIM appears to have boot/PE metadata"
           }
 
-          # Use /NoRPFix to prevent path recalculation issues and ensure bootable flag is preserved
-          # Note: /Bootable flag is not valid for Export-Image, it's only for Append-Image
-          dism /Export-Image /SourceImageFile:$root\wim\install.wim /SourceIndex:$imageIndex /DestinationImageFile:$dst /Compress:max /CheckIntegrity /NoRPFix
+          dism /Export-Image /SourceImageFile:$root\wim\install.wim /SourceIndex:$imageIndex /DestinationImageFile:$dst /Compress:max /CheckIntegrity
           if ($LASTEXITCODE -ne 0) { throw "DISM export failed" }
 
           # Verify exported WIM has boot metadata
@@ -809,6 +899,44 @@ jobs:
           if ($sizeGB -gt 8) {
             Write-Warning "Output WIM size is $sizeGB GB (>8GB). This can be expected when bundling large offline payloads."
           }
+
+      - name: Test WIM with QEMU (WSL2)
+        if: ${{ github.event.inputs.test_wim_installation == 'true' }}
+        shell: pwsh
+        env:
+          OUTPUT_WIM_NAME: ${{ github.event.inputs.output_wim_name }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $root = $env:WORK_ROOT
+          $wimName = if ([string]::IsNullOrWhiteSpace($env:OUTPUT_WIM_NAME)) { "custom-install.wim" } else { $env:OUTPUT_WIM_NAME }
+          $wimPath = "$root\output\$wimName"
+
+          if (-not (Test-Path $wimPath)) {
+            throw "WIM not found for QEMU test: $wimPath"
+          }
+
+          Write-Host "[QEMU-TEST] Preparing WSL2 environment..."
+
+          # Copy WIM to WSL
+          $wslTempPath = "/mnt/$($root[0].ToString().ToLower())/wsl-temp"
+          wsl mkdir -p $wslTempPath
+          $wslWimPath = "$wslTempPath/$wimName"
+          wsl cp "$($wimPath.Replace('\', '/').Replace('C:', '/mnt/c').Replace('D:', '/mnt/d'))" $wslWimPath
+
+          # Copy test script to WSL
+          $wslScriptPath = "$wslTempPath/test-wim-qemu.sh"
+          wsl cp "$($root.Replace('\', '/').Replace('C:', '/mnt/c').Replace('D:', '/mnt/d'))/ext-repo/win/test-wim-qemu.sh" $wslScriptPath
+
+          Write-Host "[QEMU-TEST] Running QEMU test in WSL2..."
+          wsl chmod +x $wslScriptPath
+          wsl $wslScriptPath $wslWimPath "$wslTempPath/test-output"
+
+          # Copy results back
+          $localResults = "$root\test-output"
+          New-Item -ItemType Directory -Path $localResults -Force | Out-Null
+          wsl cp -r "$wslTempPath/test-output/" "$($localResults.Replace('\', '/').Replace('C:', '/mnt/c').Replace('D:', '/mnt/d'))/"
+
+          Write-Host "[QEMU-TEST] Test completed. Results in: $localResults"
 
       - name: Build output ISO
         if: ${{ github.event.inputs.package_iso == 'true' }}
