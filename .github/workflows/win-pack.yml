@@ -428,8 +428,8 @@ jobs:
           ) -join "`r`n" | Out-File -FilePath $downloadXml -Encoding utf8 -Force
 
           Write-Host "Downloading Office offline package using aria2..."
-          $officeImgUrl = "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/zh-cn/O365ProPlusRetail.img"
-          $officeImgLocal = "$offlineDir\O365ProPlusRetail.img"
+          $officeImgUrl = "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/zh-cn/ProPlus2024Retail.img"
+          $officeImgLocal = "$offlineDir\ProPlus2024Retail.img"
 
           $ariaDir = "$root\input\aria2"
           $ariaExe = Get-ChildItem -Path $ariaDir -Recurse -Filter "aria2c.exe" | Select-Object -First 1
