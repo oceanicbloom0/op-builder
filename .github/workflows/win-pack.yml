@@ -745,6 +745,16 @@ jobs:
             -MountDir "$root\mount" `
             -WorkDir "$root\input"
 
+      - name: Inject Office into WIM
+        if: ${{ github.event.inputs.include_office_payload == 'true' }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $root = $env:WORK_ROOT
+          Write-Host "Injecting Office into WIM..."
+          & "$root\ext-repo\win\Inject-Office.ps1" -MountDir "$root\mount"
+          Write-Host "Office injection completed"
+
       - name: Inject Office, extra installers, and unattend
         shell: pwsh
         env:
