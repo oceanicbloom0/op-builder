@@ -20,7 +20,7 @@ on:
       image_index:
         description: "WIM image index"
         required: true
-        default: "1"
+        default: "4"
       apply_microwin:
         description: "Apply MicroWin (pinned winutil commit)"
         required: true
@@ -306,6 +306,48 @@ jobs:
           $proIndex = $proIndex.Trim()
           Write-Host "Using Pro edition index: $proIndex"
           "IMAGE_INDEX=$proIndex" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Extract single Pro edition from multi-edition WIM
+        shell: pwsh
+        env:
+          IMAGE_INDEX: ${{ env.IMAGE_INDEX }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $root = $env:WORK_ROOT
+          $sourceWim = "$root\wim\install.wim"
+          $singleWim = "$root\wim\install-pro-only.wim"
+
+          $imageIndex = if ([string]::IsNullOrWhiteSpace($env:IMAGE_INDEX)) { "4" } else { $env:IMAGE_INDEX }
+
+          Write-Host "Checking source WIM editions..."
+          $wimInfo = dism /Get-WimInfo /WimFile:$sourceWim
+          $indexCount = ($wimInfo | Select-String "Index :").Count
+          Write-Host "Source WIM contains $indexCount editions"
+
+          if ($indexCount -gt 1) {
+            Write-Host "Extracting single Pro edition (Index $imageIndex) to new WIM..."
+            dism /Export-Image /SourceImageFile:$sourceWim /SourceIndex:$imageIndex /DestinationImageFile:$singleWim /Compress:max /CheckIntegrity
+            if ($LASTEXITCODE -ne 0) { throw "Failed to export single edition" }
+
+            # Replace multi-edition WIM with single-edition WIM
+            Remove-Item -Path $sourceWim -Force
+            Move-Item -Path $singleWim -Destination $sourceWim -Force
+
+            Write-Host "Verifying single-edition WIM..."
+            $newWimInfo = dism /Get-WimInfo /WimFile:$sourceWim
+            $newIndexCount = ($newWimInfo | Select-String "Index :").Count
+            Write-Host "New WIM contains $newIndexCount edition(s)"
+
+            if ($newIndexCount -ne 1) {
+              throw "Expected 1 edition in new WIM, but found $newIndexCount"
+            }
+
+            # Update IMAGE_INDEX to 1 since we now have only one edition
+            "IMAGE_INDEX=1" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+            Write-Host "Single Pro edition WIM created successfully. Index is now 1."
+          } else {
+            Write-Host "Source WIM already contains single edition, no extraction needed."
+          }
 
       - name: Download Office Tool
         if: ${{ github.event.inputs.include_office_payload == 'true' }}
@@ -853,33 +895,31 @@ jobs:
           $wimInfo = dism /Get-WimInfo /WimFile:$root\wim\install.wim
           $indexCount = ($wimInfo | Select-String "Index :").Count
           Write-Host "[DEBUG] Source WIM has $indexCount indexes"
-          if ($imageIndex -gt $indexCount) {
-            throw "ERROR: Requested index $imageIndex exceeds available indexes ($indexCount) in WIM"
+
+          if ($indexCount -eq 1) {
+            Write-Host "[INFO] Source WIM already contains single edition, copying directly with max compression..."
+            dism /Export-Image /SourceImageFile:$root\wim\install.wim /SourceIndex:1 /DestinationImageFile:$dst /Compress:max /CheckIntegrity
+            if ($LASTEXITCODE -ne 0) { throw "DISM export failed" }
+          } else {
+            Write-Host "[WARNING] Source WIM still contains multiple editions ($indexCount). This should not happen after single-edition extraction."
+            if ($imageIndex -gt $indexCount) {
+              throw "ERROR: Requested index $imageIndex exceeds available indexes ($indexCount) in WIM"
+            }
+            dism /Export-Image /SourceImageFile:$root\wim\install.wim /SourceIndex:$imageIndex /DestinationImageFile:$dst /Compress:max /CheckIntegrity
+            if ($LASTEXITCODE -ne 0) { throw "DISM export failed" }
           }
 
-          Write-Host "[DEBUG] DISM command: dism /Export-Image /SourceImageFile:$root\wim\install.wim /SourceIndex:$imageIndex /DestinationImageFile:$dst /Compress:max /CheckIntegrity"
+          # Verify exported WIM
+          Write-Host "[VERIFY] Checking exported WIM..."
+          $dstInfo = dism /English /Get-WimInfo /WimFile:$dst
+          $dstIndexCount = ($dstInfo | Select-String "Index :").Count
+          Write-Host "[VERIFY] Exported WIM contains $dstIndexCount edition(s)"
 
-          # Check source WIM info and verify it's properly exportable
-          Write-Host "[DEBUG] Checking source WIM detailed info..."
-          $srcInfo = dism /English /Get-WimInfo /WimFile:$root\wim\install.wim /Index:$imageIndex
-          Write-Host ($srcInfo | Out-String)
-
-          # Check if source has Windows PE info (indicates bootable install WIM)
-          $hasPE = $srcInfo | Select-String "Windows PE"
-          $hasBootable = $srcInfo | Select-String "Bootable"
-          if ($hasPE -or $hasBootable) {
-            Write-Host "[BOOT-CHECK] Source WIM appears to have boot/PE metadata"
+          if ($dstIndexCount -ne 1) {
+            throw "ERROR: Expected 1 edition in output WIM, but found $dstIndexCount"
           }
 
-          dism /Export-Image /SourceImageFile:$root\wim\install.wim /SourceIndex:$imageIndex /DestinationImageFile:$dst /Compress:max /CheckIntegrity
-          if ($LASTEXITCODE -ne 0) { throw "DISM export failed" }
-
-          # Verify exported WIM has boot metadata
-          Write-Host "[BOOT-CHECK] Verifying exported WIM boot metadata..."
-          $dstInfo = dism /English /Get-WimInfo /WimFile:$dst /Index:1
-          Write-Host ($dstInfo | Out-String)
-          $dstHasPE = $dstInfo | Select-String "Windows PE"
-          $dstHasBootable = $dstInfo | Select-String "Bootable"
+          Write-Host "[SUCCESS] Single-edition WIM exported successfully"
           if ($dstHasPE -or $dstHasBootable) {
             Write-Host "[BOOT-CHECK] Exported WIM appears to have boot/PE metadata"
           } else {
