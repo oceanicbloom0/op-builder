@@ -535,17 +535,22 @@ jobs:
       - name: Inject Office into WIM
         if: ${{ github.event.inputs.include_office_payload == 'true' }}
         shell: pwsh
+        env:
+          ODT_SETUP_PATH: ${{ env.ODT_SETUP_PATH }}
+          OFFICE_TOOL_EXE: ${{ env.OFFICE_TOOL_EXE }}
         run: |
           $ErrorActionPreference = "Stop"
           $root = $env:WORK_ROOT
           Write-Host "Injecting Office into WIM..."
-          & "$root\ext-repo\win\Inject-Office.ps1" -MountDir "$root\mount"
+          & "$root\ext-repo\win\Inject-Office.ps1" `
+            -MountDir "$root\mount" `
+            -OfflineDataPath "$root\office-offline\Office\Data" `
+            -OdtSetupPath $env:ODT_SETUP_PATH `
+            -OfficeToolExePath $env:OFFICE_TOOL_EXE
           Write-Host "Office injection completed"
 
-      - name: Inject Office, extra installers, and unattend
+      - name: Inject extra installers and unattend
         shell: pwsh
-        env:
-          INCLUDE_OFFICE_PAYLOAD: ${{ github.event.inputs.include_office_payload }}
         run: |
           $ErrorActionPreference = "Stop"
           $root = $env:WORK_ROOT
@@ -554,109 +559,6 @@ jobs:
 
           if (Test-Path "$root\software\*") {
             Copy-Item -Path "$root\software\*" -Destination $installDir -Recurse -Force
-          }
-
-          $officeDir = Join-Path $installDir "Office"
-          if ($env:INCLUDE_OFFICE_PAYLOAD -eq "true") {
-            New-Item -ItemType Directory -Path $officeDir -Force | Out-Null
-
-            # Copy ODT setup.exe if available
-            $odtDir = "$root\odt"
-            if (Test-Path "$odtDir\setup.exe") {
-              Copy-Item -Path "$odtDir\setup.exe" -Destination $officeDir -Force
-              Write-Host "Copied ODT setup.exe"
-            } else {
-              Write-Warning "ODT setup.exe not found, ODT installation will not be available"
-            }
-
-            # Create ODT config.xml (primary installation method)
-            $configXml = Join-Path $officeDir "config.xml"
-            @(
-              '<?xml version="1.0" encoding="UTF-8"?>'
-              '<Configuration>'
-              '  <Add OfficeClientEdition="64" Channel="Current" SourcePath="C:\Install\Office\Offline">'
-              '    <Product ID="O365ProPlusRetail">'
-              '      <Language ID="zh-CN" />'
-              '      <ExcludeApp ID="Access" />'
-              '      <ExcludeApp ID="Bing" />'
-              '      <ExcludeApp ID="Groove" />'
-              '      <ExcludeApp ID="Lync" />'
-              '      <ExcludeApp ID="OneDrive" />'
-              '      <ExcludeApp ID="OneNote" />'
-              '      <ExcludeApp ID="Outlook" />'
-              '      <ExcludeApp ID="Publisher" />'
-              '      <ExcludeApp ID="Teams" />'
-              '    </Product>'
-              '  </Add>'
-              '  <Display Level="None" AcceptEULA="TRUE" />'
-              '  <Property Name="FORCEAPPSHUTDOWN" Value="TRUE" />'
-              '  <Property Name="SharedComputerLicensing" Value="0" />'
-              '  <Property Name="PinIconsToTaskbar" Value="FALSE" />'
-              '</Configuration>'
-            ) -join "`r`n" | Out-File -FilePath $configXml -Encoding utf8 -Force
-            Write-Host "Created ODT config.xml"
-
-            # Copy Office Tool Plus (fallback method)
-            if (-not [string]::IsNullOrWhiteSpace($env:OFFICE_TOOL_EXE)) {
-              $officeToolDir = Split-Path $env:OFFICE_TOOL_EXE -Parent
-              if (Test-Path $officeToolDir) {
-                Copy-Item -Path "$officeToolDir\*" -Destination $officeDir -Recurse -Force
-                Write-Host "Copied Office Tool Plus files (fallback)"
-              }
-            }
-
-            # Copy offline data
-            $offlineSrc = "$root\office-offline"
-            if (Test-Path $offlineSrc) {
-              $offlineImg = Join-Path $offlineSrc "O365ProPlusRetail.img"
-              if (Test-Path $offlineImg) {
-                Remove-Item -Path $offlineImg -Force -ErrorAction SilentlyContinue
-              }
-              $offlineDataSrc = Join-Path $offlineSrc "Office\Data"
-              if (Test-Path $offlineDataSrc) {
-                $offlineDataDst = Join-Path $officeDir "Offline\Office\Data"
-                New-Item -ItemType Directory -Path $offlineDataDst -Force | Out-Null
-                Copy-Item -Path "$offlineDataSrc\*" -Destination $offlineDataDst -Recurse -Force
-                Write-Host "Copied Office offline data files to $offlineDataDst"
-              } else {
-                Write-Warning "Office offline data path not found: $offlineDataSrc"
-              }
-            }
-
-            # Keep the old XML for compatibility (OTP fallback)
-            $officeXml = Join-Path $officeDir "office-word-excel-ppt.xml"
-            @(
-              '<Configuration>'
-              '  <Add OfficeClientEdition="64" Channel="Current">'
-              '    <Product ID="O365ProPlusRetail">'
-              '      <Language ID="MatchOS" />'
-              '      <ExcludeApp ID="Access" />'
-              '      <ExcludeApp ID="OneDrive" />'
-              '      <ExcludeApp ID="OneNote" />'
-              '      <ExcludeApp ID="Outlook" />'
-              '      <ExcludeApp ID="Publisher" />'
-              '      <ExcludeApp ID="Teams" />'
-              '      <ExcludeApp ID="Groove" />'
-              '    </Product>'
-              '  </Add>'
-              '  <Display Level="None" AcceptEULA="TRUE" />'
-              '  <Property Name="FORCEAPPSHUTDOWN" Value="TRUE" />'
-              '</Configuration>'
-            ) -join "`r`n" | Out-File -FilePath $officeXml -Encoding utf8 -Force
-
-            # Verify what we have
-            Write-Host "--- Office Directory Contents ---"
-            Get-ChildItem $officeDir -Recurse | ForEach-Object {
-              $relPath = $_.FullName.Replace($officeDir, "")
-              if ($_.PSIsContainer) {
-                Write-Host "DIR:  $relPath"
-              } else {
-                Write-Host "FILE: $relPath ($([math]::Round($_.Length/1KB,2)) KB)"
-              }
-            }
-            Write-Host "--------------------------------"
-          } else {
-            Write-Host "INCLUDE_OFFICE_PAYLOAD=false, skip Office payload injection."
           }
 
           $pantherDir = "$root\mount\Windows\Panther"
