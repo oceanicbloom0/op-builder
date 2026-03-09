@@ -897,15 +897,15 @@ jobs:
           Write-Host "[DEBUG] Source WIM has $indexCount indexes"
 
           if ($indexCount -eq 1) {
-            Write-Host "[INFO] Source WIM already contains single edition, copying directly with max compression..."
-            dism /Export-Image /SourceImageFile:$root\wim\install.wim /SourceIndex:1 /DestinationImageFile:$dst /Compress:max /CheckIntegrity
+            Write-Host "[INFO] Source WIM already contains single edition, copying directly with fast compression..."
+            dism /Export-Image /SourceImageFile:$root\wim\install.wim /SourceIndex:1 /DestinationImageFile:$dst /Compress:fast /CheckIntegrity
             if ($LASTEXITCODE -ne 0) { throw "DISM export failed" }
           } else {
             Write-Host "[WARNING] Source WIM still contains multiple editions ($indexCount). This should not happen after single-edition extraction."
             if ($imageIndex -gt $indexCount) {
               throw "ERROR: Requested index $imageIndex exceeds available indexes ($indexCount) in WIM"
             }
-            dism /Export-Image /SourceImageFile:$root\wim\install.wim /SourceIndex:$imageIndex /DestinationImageFile:$dst /Compress:max /CheckIntegrity
+            dism /Export-Image /SourceImageFile:$root\wim\install.wim /SourceIndex:$imageIndex /DestinationImageFile:$dst /Compress:fast /CheckIntegrity
             if ($LASTEXITCODE -ne 0) { throw "DISM export failed" }
           }
 
