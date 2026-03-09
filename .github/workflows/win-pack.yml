@@ -53,14 +53,6 @@ on:
         options:
           - "true"
           - "false"
-      test_wim_installation:
-        description: "Test WIM installation using QEMU/KVM on Linux runner (slower)"
-        required: true
-        default: "false"
-        type: choice
-        options:
-          - "false"
-          - "true"
 
 jobs:
   pack:
@@ -818,44 +810,6 @@ jobs:
           if ($sizeGB -gt 8) {
             Write-Warning "Output WIM size is $sizeGB GB (>8GB). This can be expected when bundling large offline payloads."
           }
-
-      - name: Test WIM with QEMU (WSL2)
-        if: ${{ github.event.inputs.test_wim_installation == 'true' }}
-        shell: pwsh
-        env:
-          OUTPUT_WIM_NAME: ${{ github.event.inputs.output_wim_name }}
-        run: |
-          $ErrorActionPreference = "Stop"
-          $root = $env:WORK_ROOT
-          $wimName = if ([string]::IsNullOrWhiteSpace($env:OUTPUT_WIM_NAME)) { "custom-install.wim" } else { $env:OUTPUT_WIM_NAME }
-          $wimPath = "$root\output\$wimName"
-
-          if (-not (Test-Path $wimPath)) {
-            throw "WIM not found for QEMU test: $wimPath"
-          }
-
-          Write-Host "[QEMU-TEST] Preparing WSL2 environment..."
-
-          # Copy WIM to WSL
-          $wslTempPath = "/mnt/$($root[0].ToString().ToLower())/wsl-temp"
-          wsl mkdir -p $wslTempPath
-          $wslWimPath = "$wslTempPath/$wimName"
-          wsl cp "$($wimPath.Replace('\', '/').Replace('C:', '/mnt/c').Replace('D:', '/mnt/d'))" $wslWimPath
-
-          # Copy test script to WSL
-          $wslScriptPath = "$wslTempPath/test-wim-qemu.sh"
-          wsl cp "$($root.Replace('\', '/').Replace('C:', '/mnt/c').Replace('D:', '/mnt/d'))/ext-repo/win/test-wim-qemu.sh" $wslScriptPath
-
-          Write-Host "[QEMU-TEST] Running QEMU test in WSL2..."
-          wsl chmod +x $wslScriptPath
-          wsl $wslScriptPath $wslWimPath "$wslTempPath/test-output"
-
-          # Copy results back
-          $localResults = "$root\test-output"
-          New-Item -ItemType Directory -Path $localResults -Force | Out-Null
-          wsl cp -r "$wslTempPath/test-output/" "$($localResults.Replace('\', '/').Replace('C:', '/mnt/c').Replace('D:', '/mnt/d'))/"
-
-          Write-Host "[QEMU-TEST] Test completed. Results in: $localResults"
 
       - name: Build output ISO
         if: ${{ github.event.inputs.package_iso == 'true' }}
