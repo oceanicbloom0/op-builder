@@ -216,21 +216,43 @@ jobs:
           $ariaExe = Get-ChildItem -Path $ariaDir -Recurse -Filter "aria2c.exe" | Select-Object -First 1
           if (-not $ariaExe) { throw "aria2c.exe not found." }
 
-          & $ariaExe.FullName `
-            --allow-overwrite=true `
-            --continue=true `
-            --max-connection-per-server=16 `
-            --split=16 `
-            --min-split-size=8M `
-            --file-allocation=none `
-            --summary-interval=5 `
-            --console-log-level=notice `
-            --dir="$root\input" `
-            --out="source_image.iso" `
-            "$sourceUrl"
+          $maxRetries = 3
+          $retryCount = 0
+          $downloadSuccess = $false
 
-          if ($LASTEXITCODE -ne 0 -or -not (Test-Path $sourceLocal)) {
-            throw "aria2 download failed."
+          while ($retryCount -lt $maxRetries -and -not $downloadSuccess) {
+            Write-Host "Download attempt $($retryCount + 1) of $maxRetries..."
+
+            & $ariaExe.FullName `
+              --allow-overwrite=true `
+              --continue=true `
+              --max-connection-per-server=5 `
+              --split=5 `
+              --min-split-size=10M `
+              --file-allocation=none `
+              --summary-interval=10 `
+              --console-log-level=notice `
+              --max-tries=5 `
+              --retry-wait=5 `
+              --timeout=60 `
+              --dir="$root\input" `
+              --out="source_image.iso" `
+              "$sourceUrl"
+
+            if ($LASTEXITCODE -eq 0 -and (Test-Path $sourceLocal)) {
+              $downloadSuccess = $true
+              Write-Host "Download completed successfully"
+            } else {
+              $retryCount++
+              if ($retryCount -lt $maxRetries) {
+                Write-Host "Download failed, retrying in 10 seconds..."
+                Start-Sleep -Seconds 10
+              }
+            }
+          }
+
+          if (-not $downloadSuccess) {
+            throw "aria2 download failed after $maxRetries attempts."
           }
 
           $isoMounted = $false
