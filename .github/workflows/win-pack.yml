@@ -9,7 +9,7 @@ on:
       runner:
         description: "Runner type"
         required: true
-        default: "windows-2025-vs2026"
+        default: "windows-2025"
         type: choice
         options:
           - windows-2022
