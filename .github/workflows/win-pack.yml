@@ -21,14 +21,6 @@ on:
         description: "WIM image index"
         required: true
         default: "4"
-      apply_microwin:
-        description: "Apply MicroWin (pinned winutil commit)"
-        required: true
-        default: "false"
-        type: choice
-        options:
-          - "true"
-          - "false"
       package_iso:
         description: "Also build ISO from auto-downloaded Win11 25H2 source"
         required: true
@@ -403,105 +395,11 @@ jobs:
             Write-Host "Source WIM already contains single edition, no extraction needed."
           }
 
-      - name: Download Office Tool
+      - name: Download Office components
         if: ${{ github.event.inputs.include_office_payload == 'true' }}
         shell: pwsh
         run: |
-          $ErrorActionPreference = "Stop"
-          $root = $env:WORK_ROOT
-          $release = (Invoke-WebRequest -UseBasicParsing -Uri "https://api.github.com/repos/YerongAI/Office-Tool/releases/latest").Content | ConvertFrom-Json
-          $asset = $release.assets | Where-Object { $_.name -like "*with_runtime*_x64.zip" } | Select-Object -First 1
-          if (-not $asset) { throw "Office Tool x64 runtime zip asset not found." }
-          $zip = "$root\input\office-tool.zip"
-          Invoke-WebRequest -UseBasicParsing -Uri $asset.browser_download_url -OutFile $zip
-          Expand-Archive -Path $zip -DestinationPath "$root\office-tool" -Force
-          $exe = Get-ChildItem -Path "$root\office-tool" -Recurse -Filter "Office Tool Plus.exe" | Select-Object -First 1
-          if (-not $exe) { throw "Office Tool Plus.exe not found in extracted files." }
-          "OFFICE_TOOL_EXE=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-
-      - name: Download Office Deployment Tool (ODT)
-        if: ${{ github.event.inputs.include_office_payload == 'true' }}
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          $root = $env:WORK_ROOT
-          $odtDir = "$root\odt"
-          New-Item -ItemType Directory -Path $odtDir -Force | Out-Null
-
-          Write-Host "Downloading Office Deployment Tool..."
-          $odtUrl = "https://download.microsoft.com/download/2/7/A/27AF1BE6-DD20-4CB4-B154-EBAB8A7D4A7E/officedeploymenttool_18129-20030.exe"
-          $odtInstaller = "$root\input\odt.exe"
-
-          # Download ODT using aria2 if available
-          $ariaDir = "$root\input\aria2"
-          $ariaExe = Get-ChildItem -Path $ariaDir -Recurse -Filter "aria2c.exe" | Select-Object -First 1
-          if ($ariaExe) {
-            & $ariaExe.FullName `
-              --allow-overwrite=true `
-              --continue=true `
-              --max-connection-per-server=8 `
-              --split=8 `
-              --dir="$root\input" `
-              --out="odt.exe" `
-              "$odtUrl"
-          } else {
-            Invoke-WebRequest -UseBasicParsing -Uri $odtUrl -OutFile $odtInstaller
-          }
-
-          if (-not (Test-Path $odtInstaller)) {
-            throw "ODT download failed"
-          }
-
-          # Extract ODT using self-extract (it's a self-extracting EXE)
-          # Try to use 7z if available, otherwise we'll extract setup.exe during injection
-          try {
-            # Extract directly using 7z if available in PATH
-            $sevenZip = Get-Command 7z -ErrorAction SilentlyContinue
-            if ($sevenZip) {
-              & 7z x "$odtInstaller" -o"$odtDir" -y
-            } else {
-              # Download 7z portable
-              $sevenZipUrl = "https://www.7-zip.org/a/7z2401-extra.7z"
-              $sevenZipArchive = "$root\input\7z-extra.7z"
-              Invoke-WebRequest -UseBasicParsing -Uri $sevenZipUrl -OutFile $sevenZipArchive -ErrorAction SilentlyContinue
-              if (Test-Path $sevenZipArchive) {
-                # We need 7z to extract 7z... try using Expand-Archive if it's a zip
-                # Otherwise, just try to run the ODT exe with /extract
-                Write-Host "Attempting to extract ODT using /extract switch..."
-                & $odtInstaller /extract:$odtDir /quiet
-              } else {
-                # Last resort: try /extract switch
-                & $odtInstaller /extract:$odtDir /quiet
-              }
-            }
-          } catch {
-            Write-Warning "ODT extraction failed, will try alternative method during injection: $_"
-          }
-
-          # Also try to download setup.exe directly as fallback
-          try {
-            $setupUrl = "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/zh-cn/setup.exe"
-            Invoke-WebRequest -UseBasicParsing -Uri $setupUrl -OutFile "$odtDir\setup.exe" -ErrorAction SilentlyContinue
-            Write-Host "Downloaded setup.exe directly"
-          } catch {
-            Write-Warning "Direct setup.exe download failed"
-          }
-
-          if (Test-Path "$odtDir\setup.exe") {
-            Write-Host "ODT setup.exe ready at: $odtDir\setup.exe"
-            "ODT_SETUP_PATH=$odtDir\setup.exe" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          } else {
-            Write-Warning "setup.exe not found in ODT directory"
-          }
-
-      - name: Download Office offline files
-        if: ${{ github.event.inputs.include_office_payload == 'true' }}
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          $root = $env:WORK_ROOT
-          $offlineDir = "$root\office-offline"
-          New-Item -ItemType Directory -Path $offlineDir -Force | Out-Null
+          & "$env:WORK_ROOT\ext-repo\win\Download-Office.ps1" -WorkDir "$env:WORK_ROOT\input"
 
           $downloadXml = Join-Path $offlineDir "download.xml"
           @(
@@ -652,89 +550,6 @@ jobs:
 
           dism /Mount-Image /ImageFile:$root\wim\install.wim /Index:$imageIndex /MountDir:$root\mount /Optimize
           if ($LASTEXITCODE -ne 0) { throw "DISM mount failed" }
-
-      - name: Apply MicroWin from pinned winutil commit
-        if: ${{ github.event.inputs.apply_microwin == 'true' }}
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          $root = $env:WORK_ROOT
-          $commit = "ac116d70839be8a9312dbe9202999d2191bee67e"
-          $zip = "$root\input\winutil-$commit.zip"
-          $srcRoot = "$root\input\winutil-src"
-
-          Invoke-WebRequest -UseBasicParsing -Uri "https://codeload.github.com/ChrisTitusTech/winutil/zip/$commit" -OutFile $zip
-          Expand-Archive -Path $zip -DestinationPath $srcRoot -Force
-          $repo = Get-ChildItem -Path $srcRoot -Directory | Select-Object -First 1
-          if (-not $repo) { throw "winutil source extraction failed." }
-          $repoPath = $repo.FullName
-
-          Push-Location $repoPath
-          try {
-            .\Compile.ps1
-          } finally {
-            Pop-Location
-          }
-          if (-not (Test-Path (Join-Path $repoPath "winutil.ps1"))) {
-            throw "winutil.ps1 was not generated from pinned commit."
-          }
-
-          function DotLoad([string]$path) {
-            Write-Host "[LOAD] $path"
-            . $path
-          }
-
-          Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
-          DotLoad (Join-Path $repoPath "functions\private\Get-LocalizedYesNo.ps1")
-          DotLoad (Join-Path $repoPath "functions\microwin\Microwin-Classes.ps1")
-          DotLoad (Join-Path $repoPath "functions\microwin\Microwin-RemoveFeatures.ps1")
-          DotLoad (Join-Path $repoPath "functions\microwin\Microwin-RemovePackages.ps1")
-          DotLoad (Join-Path $repoPath "functions\microwin\Microwin-RemoveProvisionedPackages.ps1")
-          DotLoad (Join-Path $repoPath "functions\microwin\Microwin-RemoveFileOrDirectory.ps1")
-
-          $script:scratchDir = "$root\mount"
-
-          # Pre-MicroWin: Backup critical boot files
-          & "$root\ext-repo\win\Protect-BootFiles.ps1" -Action Backup -MountDir "$root\mount" -BackupDir "$root\boot-backup"
-
-          Write-Host "[RUN] Microwin-RemoveFeatures"
-          Microwin-RemoveFeatures -UseCmdlets $true
-          Write-Host "[RUN] Microwin-RemovePackages"
-          Microwin-RemovePackages -UseCmdlets $true
-          Write-Host "[RUN] Microwin-RemoveProvisionedPackages"
-          Microwin-RemoveProvisionedPackages -UseCmdlets $true
-          Write-Host "[RUN] Microwin-RemoveFileOrDirectory (target cleanup)"
-          Microwin-RemoveFileOrDirectory -pathToDelete "$root\mount\Windows\DiagTrack" -Directory
-          Microwin-RemoveFileOrDirectory -pathToDelete "$root\mount\Windows\InboxApps" -Directory
-          Microwin-RemoveFileOrDirectory -pathToDelete "$root\mount\Windows\System32\OneDriveSetup.exe"
-          Microwin-RemoveFileOrDirectory -pathToDelete "$root\mount\Windows\System32\OneDrive.ico"
-          Microwin-RemoveFileOrDirectory -pathToDelete "$root\mount\Program Files (x86)\Internet Explorer" -Directory
-          Microwin-RemoveFileOrDirectory -pathToDelete "$root\mount\Program Files\Internet Explorer" -Directory
-
-          # Post-MicroWin: Restore critical boot files
-          & "$root\ext-repo\win\Protect-BootFiles.ps1" -Action Restore -MountDir "$root\mount" -BackupDir "$root\boot-backup"
-
-          reg load HKLM\OFFLINE_SYSTEM "$root\mount\Windows\System32\config\SYSTEM"
-          reg load HKLM\OFFLINE_SOFTWARE "$root\mount\Windows\System32\config\SOFTWARE"
-          try {
-            reg add "HKLM\OFFLINE_SYSTEM\Setup\LabConfig" /v BypassCPUCheck /t REG_DWORD /d 1 /f
-            reg add "HKLM\OFFLINE_SYSTEM\Setup\LabConfig" /v BypassRAMCheck /t REG_DWORD /d 1 /f
-            reg add "HKLM\OFFLINE_SYSTEM\Setup\LabConfig" /v BypassSecureBootCheck /t REG_DWORD /d 1 /f
-            reg add "HKLM\OFFLINE_SYSTEM\Setup\LabConfig" /v BypassStorageCheck /t REG_DWORD /d 1 /f
-            reg add "HKLM\OFFLINE_SYSTEM\Setup\LabConfig" /v BypassTPMCheck /t REG_DWORD /d 1 /f
-            reg add "HKLM\OFFLINE_SOFTWARE\Microsoft\PowerShell\1\ShellIds\Microsoft.PowerShell" /v ExecutionPolicy /t REG_SZ /d RemoteSigned /f
-          } finally {
-            reg unload HKLM\OFFLINE_SOFTWARE
-            reg unload HKLM\OFFLINE_SYSTEM
-          }
-
-      # DEBUG: Temporarily disable registry modifications
-      # - name: Set desktop icons and taskbar combine (offline registry)
-      #   shell: pwsh
-      #   run: |
-      #     $ErrorActionPreference = "Stop"
-      #     $root = $env:WORK_ROOT
-      #     Write-Host "[DEBUG] Skipping registry modifications for testing"
 
       - name: Inject DefenderRemover
         shell: pwsh
