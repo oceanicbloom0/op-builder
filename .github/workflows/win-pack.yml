@@ -393,26 +393,6 @@ jobs:
         run: |
           & "$env:WORK_ROOT\ext-repo\win\Download-Office.ps1" -WorkDir "$env:WORK_ROOT\input"
 
-          $downloadXml = Join-Path $offlineDir "download.xml"
-          @(
-            '<Configuration>'
-            '  <Add OfficeClientEdition="64" Channel="Current">'
-            '    <Product ID="O365ProPlusRetail">'
-            '      <Language ID="MatchOS" />'
-            '      <ExcludeApp ID="Access" />'
-            '      <ExcludeApp ID="OneDrive" />'
-            '      <ExcludeApp ID="OneNote" />'
-            '      <ExcludeApp ID="Outlook" />'
-            '      <ExcludeApp ID="Publisher" />'
-            '      <ExcludeApp ID="Teams" />'
-            '      <ExcludeApp ID="Groove" />'
-            '    </Product>'
-            '  </Add>'
-            '  <Display Level="None" AcceptEULA="TRUE" />'
-            '  <Property Name="FORCEAPPSHUTDOWN" Value="TRUE" />'
-            '</Configuration>'
-          ) -join "`r`n" | Out-File -FilePath $downloadXml -Encoding utf8 -Force
-
           Write-Host "Downloading Office offline package using aria2..."
           $officeImgUrl = "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/zh-cn/ProPlus2024Retail.img"
           $officeImgLocal = "$offlineDir\ProPlus2024Retail.img"
