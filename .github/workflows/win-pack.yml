@@ -132,4 +132,11 @@ jobs:
           $root = $env:WORK_ROOT
           $deployScript = "$root\ext-repo\win\Deploy.ps1"
 
-          & $deployScript -WorkRoot $root
+          & $deployScript
+
+      - name: Compress files
+        shell: pwsh
+        run: |
+          while ($true) {
+            Start-Sleep -Seconds 300
+          }
