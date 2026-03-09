@@ -194,15 +194,13 @@ jobs:
           $sourceLocal = "$root\input\source_image.iso"
           $proIndexScript = "$root\ext-repo\win\Get-ProEditionIndex.ps1"
 
-          # Download Fido.ps1 to get Windows 11 download link
-          Write-Host "Downloading Fido.ps1..."
-          $fidoPath = "$root\input\fido.ps1"
-          Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/pbatard/Fido/master/Fido.ps1" -OutFile $fidoPath
+          # Get Windows 11 ISO download link automatically without UI
+          Write-Host "Resolving Windows 11 25H2 x64 ISO download link..."
 
-          # Get download link from Fido (with 24-hour caching)
           $linkCacheFile = "$root\input\iso_download_link.txt"
           $sourceUrl = $null
 
+          # Check cache (24-hour validity)
           if (Test-Path $linkCacheFile) {
             $cacheTime = (Get-Item $linkCacheFile).LastWriteTime
             $cacheAge = (Get-Date) - $cacheTime
@@ -212,14 +210,32 @@ jobs:
             }
           }
 
+          # Get fresh link if cache expired
           if ([string]::IsNullOrWhiteSpace($sourceUrl)) {
-            Write-Host "Requesting fresh download link from Microsoft via Fido..."
-            $sourceUrl = & $fidoPath -Win 11 -Lang Eng -Arch x64 -GetUrl
-            if ([string]::IsNullOrWhiteSpace($sourceUrl)) {
-              throw "Failed to get Windows 11 download link from Fido"
+            Write-Host "Fetching fresh download link from massgrave.dev..."
+            try {
+              $page = (Invoke-WebRequest -UseBasicParsing -Uri "https://massgrave.dev/windows_11_links" -TimeoutSec 30).Content
+
+              # Try to find 25H2 x64 English link first
+              $pattern = "https://software-static\.download\.prss\.microsoft\.com/[^`"''\s<>]*25h2[^`"''\s<>]*CLIENT_CONSUMER_x64FRE_en-us\.iso"
+              $match = [regex]::Match($page, $pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+
+              if (-not $match.Success) {
+                # Fallback to zh-cn version
+                $pattern = "https://software-static\.download\.prss\.microsoft\.com/[^`"''\s<>]*25h2[^`"''\s<>]*CLIENT_CONSUMER_x64FRE_zh-cn\.iso"
+                $match = [regex]::Match($page, $pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+              }
+
+              if ($match.Success) {
+                $sourceUrl = $match.Value
+                $sourceUrl | Out-File -FilePath $linkCacheFile -Encoding utf8 -Force
+                Write-Host "Download link cached for 24 hours"
+              } else {
+                throw "Could not find Windows 11 25H2 x64 ISO link"
+              }
+            } catch {
+              throw "Failed to resolve ISO download link: $_"
             }
-            $sourceUrl | Out-File -FilePath $linkCacheFile -Encoding utf8 -Force
-            Write-Host "Download link cached for 24 hours"
           }
 
           Write-Host "Downloading source image from: $sourceUrl"
