@@ -524,18 +524,14 @@ jobs:
             -MountDir "$root\mount" `
             -SoftwareSilentArgs $env:SOFTWARE_SILENT_ARGS
 
-      - name: Verify boot files before commit
+      - name: Verify and commit WIM changes
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
           $root = $env:WORK_ROOT
-          & "$root\ext-repo\win\Test-BootFiles.ps1" -MountDir "$root\mount"
 
-      - name: Commit WIM changes
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          $root = $env:WORK_ROOT
+          # Verify boot files before commit
+          & "$root\ext-repo\win\Test-BootFiles.ps1" -MountDir "$root\mount"
 
           # Check mounted image health before cleanup
           Write-Host "[HEALTH-CHECK] Checking mounted image health..."
