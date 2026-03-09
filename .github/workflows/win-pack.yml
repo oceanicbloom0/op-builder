@@ -194,18 +194,34 @@ jobs:
           $sourceLocal = "$root\input\source_image.iso"
           $proIndexScript = "$root\ext-repo\win\Get-ProEditionIndex.ps1"
 
-          $linksPage = "https://massgrave.dev/windows_11_links"
-          Write-Host "Resolving Win11 25H2 x64 zh-cn official ISO URL from $linksPage ..."
-          $page = (Invoke-WebRequest -UseBasicParsing -Uri $linksPage).Content
-          $match = [regex]::Match(
-            $page,
-            'https://software-static\.download\.prss\.microsoft\.com/[^"''\s<>]*25h2[^"''\s<>]*CLIENT_CONSUMER_x64FRE_zh-cn\.iso',
-            [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
-          )
-          if (-not $match.Success) {
-            throw "Failed to resolve Win11 25H2 x64 zh-cn ISO URL from Massgrave."
+          # Download Fido.ps1 to get Windows 11 download link
+          Write-Host "Downloading Fido.ps1..."
+          $fidoPath = "$root\input\fido.ps1"
+          Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/pbatard/Fido/master/Fido.ps1" -OutFile $fidoPath
+
+          # Get download link from Fido (with 24-hour caching)
+          $linkCacheFile = "$root\input\iso_download_link.txt"
+          $sourceUrl = $null
+
+          if (Test-Path $linkCacheFile) {
+            $cacheTime = (Get-Item $linkCacheFile).LastWriteTime
+            $cacheAge = (Get-Date) - $cacheTime
+            if ($cacheAge.TotalHours -lt 24) {
+              $sourceUrl = Get-Content $linkCacheFile -Raw
+              Write-Host "Using cached download link (age: $([math]::Round($cacheAge.TotalHours, 1)) hours)"
+            }
           }
-          $sourceUrl = $match.Value
+
+          if ([string]::IsNullOrWhiteSpace($sourceUrl)) {
+            Write-Host "Requesting fresh download link from Microsoft via Fido..."
+            $sourceUrl = & $fidoPath -Win 11 -Lang Eng -Arch x64 -GetUrl
+            if ([string]::IsNullOrWhiteSpace($sourceUrl)) {
+              throw "Failed to get Windows 11 download link from Fido"
+            }
+            $sourceUrl | Out-File -FilePath $linkCacheFile -Encoding utf8 -Force
+            Write-Host "Download link cached for 24 hours"
+          }
+
           Write-Host "Downloading source image from: $sourceUrl"
 
           $ariaDir = "$root\input\aria2"
