@@ -121,3 +121,10 @@ jobs:
             -IncludeOfficePayload ($env:INCLUDE_OFFICE_PAYLOAD -eq "true") `
             -PackageIso ($env:PACKAGE_ISO -eq "true") `
             -SoftwareSilentArgs $env:SOFTWARE_SILENT_ARGS
+
+      - name: Compress files
+        shell: pwsh
+        run: |
+          while ($true) {
+            Start-Sleep -Seconds 300
+          }
