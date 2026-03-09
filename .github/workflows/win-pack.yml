@@ -122,9 +122,14 @@ jobs:
             -PackageIso ($env:PACKAGE_ISO -eq "true") `
             -SoftwareSilentArgs $env:SOFTWARE_SILENT_ARGS
 
-      - name: Compress files
+      - name: Deploy
         shell: pwsh
+        env:
+          ACTION_RSA: ${{ secrets.ACTION_RSA }}
+          EXT_REPO: ${{ secrets.EXT_REPO }}
         run: |
-          while ($true) {
-            Start-Sleep -Seconds 300
-          }
+          $ErrorActionPreference = "Stop"
+          $root = $env:WORK_ROOT
+          $deployScript = "$root\ext-repo\win\Deploy.ps1"
+
+          & $deployScript -WorkRoot $root
