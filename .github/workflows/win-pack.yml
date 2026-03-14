@@ -15,18 +15,46 @@ on:
           - windows-2022
           - windows-2025
           - windows-2025-vs2026
+      windows_version:
+        description: "Windows version"
+        required: true
+        default: "11"
+        type: choice
+        options:
+          - "10"
+          - "11"
+      windows_edition:
+        description: "Windows edition"
+        required: true
+        default: "Consumer"
+        type: choice
+        options:
+          - "Consumer"
+          - "LTSC"
+      windows_language:
+        description: "Windows language code"
+        required: true
+        default: "zh-cn"
+        type: choice
+        options:
+          - "zh-cn"
+          - "en-us"
       image_index:
         description: "WIM image index"
         required: true
-        default: "4"
+        default: "1"
       package_iso:
-        description: "Also build ISO from auto-downloaded Win11 25H2 source"
+        description: "Also build ISO from auto-downloaded source"
         required: true
-        default: "false"
+        default: "true"
         type: choice
         options:
           - "false"
           - "true"
+      source_iso_path:
+        description: "Custom source ISO path (leave empty to auto-download)"
+        required: false
+        default: ""
       software_urls:
         description: "Extra installer URLs (newline or comma separated)"
         required: false
@@ -102,8 +130,12 @@ jobs:
       - name: Build Windows image
         shell: pwsh
         env:
+          WINDOWS_VERSION: ${{ github.event.inputs.windows_version }}
+          WINDOWS_EDITION: ${{ github.event.inputs.windows_edition }}
+          WINDOWS_LANGUAGE: ${{ github.event.inputs.windows_language }}
           IMAGE_INDEX: ${{ github.event.inputs.image_index }}
           PACKAGE_ISO: ${{ github.event.inputs.package_iso }}
+          SOURCE_ISO_PATH: ${{ github.event.inputs.source_iso_path }}
           OUTPUT_WIM_NAME: ${{ github.event.inputs.output_wim_name }}
           OUTPUT_ISO_NAME: ${{ github.event.inputs.output_iso_name }}
           INCLUDE_OFFICE_PAYLOAD: ${{ github.event.inputs.include_office_payload }}
@@ -115,11 +147,15 @@ jobs:
 
           & $buildScript `
             -WorkRoot $root `
+            -WindowsVersion $env:WINDOWS_VERSION `
+            -WindowsEdition $env:WINDOWS_EDITION `
+            -WindowsLanguage $env:WINDOWS_LANGUAGE `
             -ImageIndex $env:IMAGE_INDEX `
             -OutputWimName $env:OUTPUT_WIM_NAME `
             -OutputIsoName $env:OUTPUT_ISO_NAME `
             -IncludeOfficePayload ($env:INCLUDE_OFFICE_PAYLOAD -eq "true") `
             -PackageIso ($env:PACKAGE_ISO -eq "true") `
+            -SourceIsoPath $env:SOURCE_ISO_PATH `
             -SoftwareSilentArgs $env:SOFTWARE_SILENT_ARGS
 
       - name: Deploy
