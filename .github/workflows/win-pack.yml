@@ -51,6 +51,14 @@ on:
         options:
           - "false"
           - "true"
+      use_esd_compression:
+        description: "Use ESD compression for smaller ISO size (slower)"
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
       source_iso_path:
         description: "Custom source ISO path (leave empty to auto-download)"
         required: false
@@ -135,6 +143,7 @@ jobs:
           WINDOWS_LANGUAGE: ${{ github.event.inputs.windows_language }}
           IMAGE_INDEX: ${{ github.event.inputs.image_index }}
           PACKAGE_ISO: ${{ github.event.inputs.package_iso }}
+          USE_ESD_COMPRESSION: ${{ github.event.inputs.use_esd_compression }}
           SOURCE_ISO_PATH: ${{ github.event.inputs.source_iso_path }}
           OUTPUT_WIM_NAME: ${{ github.event.inputs.output_wim_name }}
           OUTPUT_ISO_NAME: ${{ github.event.inputs.output_iso_name }}
@@ -155,6 +164,7 @@ jobs:
             -OutputIsoName $env:OUTPUT_ISO_NAME `
             -IncludeOfficePayload ($env:INCLUDE_OFFICE_PAYLOAD -eq "true") `
             -PackageIso ($env:PACKAGE_ISO -eq "true") `
+            -UseEsdCompression ($env:USE_ESD_COMPRESSION -eq "true") `
             -SourceIsoPath $env:SOURCE_ISO_PATH `
             -SoftwareSilentArgs $env:SOFTWARE_SILENT_ARGS
 
