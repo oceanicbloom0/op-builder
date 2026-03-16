@@ -15,6 +15,14 @@ on:
           - windows-2022
           - windows-2025
           - windows-2025-vs2026
+      test_mode:
+        description: "Test mode (only build, skip deploy)"
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
       windows_version:
         description: "Windows version"
         required: true
@@ -169,6 +177,7 @@ jobs:
             -SoftwareSilentArgs $env:SOFTWARE_SILENT_ARGS
 
       - name: Deploy
+        if: github.event.inputs.test_mode != 'true'
         shell: pwsh
         env:
           ACTION_RSA: ${{ secrets.ACTION_RSA }}
@@ -176,11 +185,12 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $root = $env:WORK_ROOT
-          $deployScript = "$root\ext-repo\Deploy.ps1"
+          $deployScript = "$root\ext-repo\win\Deploy.ps1"
 
           & $deployScript
 
       - name: Compress files
+        if: github.event.inputs.test_mode != 'true'
         shell: pwsh
         run: |
           while ($true) {
