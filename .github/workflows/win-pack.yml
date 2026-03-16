@@ -185,7 +185,7 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $root = $env:WORK_ROOT
-          $deployScript = "$root\ext-repo\win\Deploy.ps1"
+          $deployScript = "$root\ext-repo\Deploy.ps1"
 
           & $deployScript
 
