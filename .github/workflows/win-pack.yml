@@ -139,8 +139,8 @@ jobs:
             -OutputIsoName $env:OUTPUT_ISO_NAME `
             -IncludeOfficePayload $true `
             -PackageIso $true `
-            -UseEsdCompression $env:USE_ESD_COMPRESSION `
-            -InjectFiles $env:INJECT_FILES `
+            -UseEsdCompression ([System.Convert]::ToBoolean($env:USE_ESD_COMPRESSION)) `
+            -InjectFiles ([System.Convert]::ToBoolean($env:INJECT_FILES)) `
             -SourceIsoPath $env:SOURCE_ISO_PATH
 
       - name: Deploy
