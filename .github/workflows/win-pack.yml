@@ -47,18 +47,6 @@ on:
         options:
           - "zh-cn"
           - "en-us"
-      image_index:
-        description: "WIM image index"
-        required: true
-        default: "1"
-      package_iso:
-        description: "Also build ISO from auto-downloaded source"
-        required: true
-        default: "true"
-        type: choice
-        options:
-          - "false"
-          - "true"
       use_esd_compression:
         description: "Use ESD compression for smaller ISO size (slower)"
         required: true
@@ -67,18 +55,18 @@ on:
         options:
           - "false"
           - "true"
+      inject_files:
+        description: "Inject files from InjectFiles directory"
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "false"
+          - "true"
       source_iso_path:
         description: "Custom source ISO path (leave empty to auto-download)"
         required: false
         default: ""
-      software_urls:
-        description: "Extra installer URLs (newline or comma separated)"
-        required: false
-        default: ""
-      software_silent_args:
-        description: "Silent install args for extra EXE/MSI"
-        required: false
-        default: "/quiet /norestart"
       output_wim_name:
         description: "Output WIM filename"
         required: true
@@ -87,14 +75,6 @@ on:
         description: "Output ISO filename (if package_iso=true)"
         required: true
         default: "custom-install.iso"
-      include_office_payload:
-        description: "Bundle Office offline payload into image (large size impact)"
-        required: true
-        default: "true"
-        type: choice
-        options:
-          - "true"
-          - "false"
 
 jobs:
   pack:
@@ -149,14 +129,11 @@ jobs:
           WINDOWS_VERSION: ${{ github.event.inputs.windows_version }}
           WINDOWS_EDITION: ${{ github.event.inputs.windows_edition }}
           WINDOWS_LANGUAGE: ${{ github.event.inputs.windows_language }}
-          IMAGE_INDEX: ${{ github.event.inputs.image_index }}
-          PACKAGE_ISO: ${{ github.event.inputs.package_iso }}
           USE_ESD_COMPRESSION: ${{ github.event.inputs.use_esd_compression }}
+          INJECT_FILES: ${{ github.event.inputs.inject_files }}
           SOURCE_ISO_PATH: ${{ github.event.inputs.source_iso_path }}
           OUTPUT_WIM_NAME: ${{ github.event.inputs.output_wim_name }}
           OUTPUT_ISO_NAME: ${{ github.event.inputs.output_iso_name }}
-          INCLUDE_OFFICE_PAYLOAD: ${{ github.event.inputs.include_office_payload }}
-          SOFTWARE_SILENT_ARGS: ${{ github.event.inputs.software_silent_args }}
         run: |
           $ErrorActionPreference = "Stop"
           $root = $env:WORK_ROOT
@@ -167,14 +144,13 @@ jobs:
             -WindowsVersion $env:WINDOWS_VERSION `
             -WindowsEdition $env:WINDOWS_EDITION `
             -WindowsLanguage $env:WINDOWS_LANGUAGE `
-            -ImageIndex $env:IMAGE_INDEX `
             -OutputWimName $env:OUTPUT_WIM_NAME `
             -OutputIsoName $env:OUTPUT_ISO_NAME `
-            -IncludeOfficePayload ($env:INCLUDE_OFFICE_PAYLOAD -eq "true") `
-            -PackageIso ($env:PACKAGE_ISO -eq "true") `
+            -IncludeOfficePayload $true `
+            -PackageIso $true `
             -UseEsdCompression ($env:USE_ESD_COMPRESSION -eq "true") `
-            -SourceIsoPath $env:SOURCE_ISO_PATH `
-            -SoftwareSilentArgs $env:SOFTWARE_SILENT_ARGS
+            -InjectFiles ($env:INJECT_FILES -eq "true") `
+            -SourceIsoPath $env:SOURCE_ISO_PATH
 
       - name: Deploy
         if: github.event.inputs.test_mode != 'true'
