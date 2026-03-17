@@ -144,7 +144,7 @@ jobs:
             -SourceIsoPath $env:SOURCE_ISO_PATH
 
       - name: Deploy
-        if: github.event.inputs.test_mode != true
+        if: ${{ !inputs.test_mode }}
         shell: pwsh
         env:
           ACTION_RSA: ${{ secrets.ACTION_RSA }}
@@ -157,7 +157,7 @@ jobs:
           & $deployScript
 
       - name: Compress files
-        if: github.event.inputs.test_mode != true
+        if: ${{ !inputs.test_mode }}
         shell: pwsh
         run: |
           while ($true) {
