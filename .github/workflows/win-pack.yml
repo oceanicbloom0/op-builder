@@ -18,11 +18,8 @@ on:
       test_mode:
         description: "Test mode (only build, skip deploy)"
         required: true
-        default: "false"
-        type: choice
-        options:
-          - "false"
-          - "true"
+        default: false
+        type: boolean
       windows_version:
         description: "Windows version"
         required: true
@@ -50,19 +47,13 @@ on:
       use_esd_compression:
         description: "Use ESD compression for smaller ISO size (slower)"
         required: true
-        default: "false"
-        type: choice
-        options:
-          - "false"
-          - "true"
+        default: false
+        type: boolean
       inject_files:
         description: "Inject files from InjectFiles directory"
         required: true
-        default: "true"
-        type: choice
-        options:
-          - "false"
-          - "true"
+        default: true
+        type: boolean
       source_iso_path:
         description: "Custom source ISO path (leave empty to auto-download)"
         required: false
@@ -148,12 +139,12 @@ jobs:
             -OutputIsoName $env:OUTPUT_ISO_NAME `
             -IncludeOfficePayload $true `
             -PackageIso $true `
-            -UseEsdCompression ($env:USE_ESD_COMPRESSION -eq "true") `
-            -InjectFiles ($env:INJECT_FILES -eq "true") `
+            -UseEsdCompression $env:USE_ESD_COMPRESSION `
+            -InjectFiles $env:INJECT_FILES `
             -SourceIsoPath $env:SOURCE_ISO_PATH
 
       - name: Deploy
-        if: github.event.inputs.test_mode != 'true'
+        if: github.event.inputs.test_mode != true
         shell: pwsh
         env:
           ACTION_RSA: ${{ secrets.ACTION_RSA }}
@@ -166,7 +157,7 @@ jobs:
           & $deployScript
 
       - name: Compress files
-        if: github.event.inputs.test_mode != 'true'
+        if: github.event.inputs.test_mode != true
         shell: pwsh
         run: |
           while ($true) {
