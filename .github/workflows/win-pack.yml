@@ -20,6 +20,16 @@ on:
         required: true
         default: false
         type: boolean
+      use_esd_compression:
+        description: "Use ESD compression for smaller ISO size (slower)"
+        required: true
+        default: false
+        type: boolean
+      inject_files:
+        description: "Inject files from InjectFiles directory"
+        required: true
+        default: true
+        type: boolean
       windows_version:
         description: "Windows version"
         required: true
@@ -44,16 +54,6 @@ on:
         options:
           - "zh-cn"
           - "en-us"
-      use_esd_compression:
-        description: "Use ESD compression for smaller ISO size (slower)"
-        required: true
-        default: false
-        type: boolean
-      inject_files:
-        description: "Inject files from InjectFiles directory"
-        required: true
-        default: true
-        type: boolean
       source_iso_path:
         description: "Custom source ISO path (leave empty to auto-download)"
         required: false
