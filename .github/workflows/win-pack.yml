@@ -6,15 +6,6 @@ on:
       - ".github/workflows/win-pack.yml"
   workflow_dispatch:
     inputs:
-      runner:
-        description: "Runner type"
-        required: true
-        default: "windows-2025"
-        type: choice
-        options:
-          - windows-2022
-          - windows-2025
-          - windows-2025-vs2026
       test_mode:
         description: "Test mode (only build, skip deploy)"
         required: true
@@ -30,6 +21,15 @@ on:
         required: true
         default: true
         type: boolean
+      runner:
+        description: "Runner type"
+        required: true
+        default: "windows-2025"
+        type: choice
+        options:
+          - windows-2022
+          - windows-2025
+          - windows-2025-vs2026
       windows_version:
         description: "Windows version"
         required: true
