@@ -55,7 +55,7 @@ on:
           - "zh-cn"
           - "en-us"
       source_iso_path:
-        description: "Custom source ISO path (leave empty to auto-download)"
+        description: "Custom source ISO path or URL (leave empty to auto-download)"
         required: false
         default: ""
       output_wim_name:
