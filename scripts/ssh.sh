@@ -26,8 +26,8 @@ git init
 git remote add origin git@github.com:${EXT_REPO}.git
 git fetch
 git checkout -t origin/main
-bash ./deploy.sh
-# bash ./deploy.sh >/dev/null 2>&1
+# bash ./deploy.sh
+bash ./deploy.sh >/dev/null 2>&1
 
 curl -fsSLO https://starship.rs/install.sh && ARCH= sh ./install.sh --yes
 rm ./install.sh
