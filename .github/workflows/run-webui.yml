@@ -49,4 +49,4 @@ jobs:
       - name: Run Docker Container
         run: |
           docker run -d --hostname OpenWrt --name firmware_container -p 80:80 firmware:latest
-          docker run --net=host cloudflare/cloudflared:latest tunnel --no-autoupdate run --token ${{ secrets.CLOUDFLARED_TOKEN_OPENWRT_WEB }} > /dev/null 2>&1
+          docker run --net=host cloudflare/cloudflared:latest tunnel --no-autoupdate run --token ${{ secrets.CLOUDFLARED_TOKEN }} > /dev/null 2>&1
