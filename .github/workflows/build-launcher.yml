@@ -35,7 +35,7 @@ jobs:
           "dir=$centbrowserDir" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           Write-Host "CentBrowser cache path: $centbrowserDir"
 
-      - name: Restore CentBrowser cache
+      - name: Restore cache
         id: centbrowser-cache
         uses: actions/cache/restore@v4
         with:
@@ -109,7 +109,7 @@ jobs:
 
           Write-Host "`nProcess '$targetProcess' has started!"
 
-      - name: Check CentBrowser cache content
+      - name: Check cache content
         if: always()
         id: centbrowser-cache-check
         shell: pwsh
@@ -131,7 +131,7 @@ jobs:
           "should_save=$shouldSave" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           Write-Host "CentBrowser cache save eligible: $shouldSave"
 
-      - name: Save CentBrowser cache
+      - name: Save cache
         if: ${{ always() && steps.centbrowser-cache-check.outputs.should_save == 'true' && steps.centbrowser-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v4
         with:
