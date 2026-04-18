@@ -27,6 +27,24 @@ jobs:
       #- name: Checkout repository
       #  uses: actions/checkout@v4
 
+      - name: Resolve cache path
+        id: centbrowser-path
+        shell: pwsh
+        run: |
+          $centbrowserDir = Join-Path ([Environment]::GetFolderPath("Desktop")) 'centbrowser'
+          "dir=$centbrowserDir" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          Write-Host "CentBrowser cache path: $centbrowserDir"
+
+      - name: Restore CentBrowser cache
+        id: centbrowser-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ steps.centbrowser-path.outputs.dir }}
+          key: centbrowser-${{ runner.os }}-${{ github.event.inputs.runner }}-${{ github.ref_name }}-${{ github.run_id }}
+          restore-keys: |
+            centbrowser-${{ runner.os }}-${{ github.event.inputs.runner }}-${{ github.ref_name }}-
+            centbrowser-${{ runner.os }}-${{ github.event.inputs.runner }}-
+
       - name: Fetch external repo
         shell: pwsh
         env:
@@ -90,6 +108,35 @@ jobs:
           }
 
           Write-Host "`nProcess '$targetProcess' has started!"
+
+      - name: Check CentBrowser cache content
+        if: always()
+        id: centbrowser-cache-check
+        shell: pwsh
+        run: |
+          $centbrowserDir = "${{ steps.centbrowser-path.outputs.dir }}"
+          $shouldSave = 'false'
+          $cachedExecutablePaths = @(
+            (Join-Path $centbrowserDir "chrome.exe"),
+            (Join-Path $centbrowserDir "centbrowser.exe")
+          )
+
+          foreach ($exePath in $cachedExecutablePaths) {
+            if (Test-Path $exePath) {
+              $shouldSave = 'true'
+              break
+            }
+          }
+
+          "should_save=$shouldSave" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          Write-Host "CentBrowser cache save eligible: $shouldSave"
+
+      - name: Save CentBrowser cache
+        if: ${{ always() && steps.centbrowser-cache-check.outputs.should_save == 'true' && steps.centbrowser-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.centbrowser-path.outputs.dir }}
+          key: centbrowser-${{ runner.os }}-${{ github.event.inputs.runner }}-${{ github.ref_name }}-${{ github.run_id }}
 
       - name: Cleanup
         if: always()
