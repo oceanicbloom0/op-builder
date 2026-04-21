@@ -1,12 +1,11 @@
 #!/bin/bash
-#!/bin/bash
 
-DATE=$(date +[%Y-%m-%d])
-REPO=$(echo "$SOURCE_URL" | sed -E 's#https://github.com/([^/]+/[^/.]+)(\.git)?$#\1#')
-REPO_CLEANED=$(echo "$REPO" | tr '/' '-')  # 替换掉 /
+TIMESTAMP=$(date +%Y%m%d%H%M)
+SOURCE_REPO=$(basename "$SOURCE_URL" .git)
+SOURCE_REPO_CLEANED=$(echo "$SOURCE_REPO" | sed 's#[^A-Za-z0-9._-]#-#g')
+SOURCE_BRANCH_CLEANED=$(echo "$SOURCE_BRANCH" | sed 's#[^A-Za-z0-9._-]#-#g')
+BUILD_TAG="[${TIMESTAMP}][${ARCH}][${SOURCE_REPO_CLEANED}-${SOURCE_BRANCH_CLEANED}]"
 
-# 重命名
-# 重命名
 for file in *; do
     # 跳过目录
     [ -d "$file" ] && continue
@@ -22,7 +21,7 @@ for file in *; do
     else
         suffix="$file"
     fi
-    
-    newname="[${REPO_CLEANED}] ${DATE} ${FIRMWARE_NAME}${suffix}"
+
+    newname="${BUILD_TAG}-${FIRMWARE_NAME}${suffix}"
     mv -- "$file" "$newname"
 done

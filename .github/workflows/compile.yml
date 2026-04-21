@@ -150,11 +150,15 @@ jobs:
             exit 1
           fi
 
+      - name: Generate release metadata
+        run: |
+          SOURCE_REPO="$(basename "$SOURCE_URL" .git)"
+          echo "SOURCE_REPO=$SOURCE_REPO" >> $GITHUB_ENV
+          echo "RELEASE_TARGET_TAG=${RELEASE_TAG}-${DEVICE}-${ARCH}-${SOURCE_REPO}-${SOURCE_BRANCH}" >> $GITHUB_ENV
+          echo "RELEASE_NAME=${FIRMWARE_NAME} | ${DEVICE} | ${ARCH} | ${SOURCE_REPO}:${SOURCE_BRANCH}" >> $GITHUB_ENV
+
       - name: Mount toolchain
         run: |
-          # Set SOURCE_REPO
-          export SOURCE_REPO="$(basename ${{ env.SOURCE_URL }} .git)"
-
           for i in {0..9}
           do
             echo downloading..
@@ -202,7 +206,7 @@ jobs:
       - name: Output the plugin list
         run: |
           cd $OPENWRT_PATH
-          bash $GITHUB_WORKSPACE/scripts/openwrt/list-packages.sh
+          bash $GITHUB_WORKSPACE/scripts/openwrt/list-packages.sh | tee $GITHUB_WORKSPACE/package-summary.txt
 
       - name: Make download
         run: |
@@ -294,6 +298,7 @@ jobs:
           cd $OPENWRT_PATH
 
           echo "DATE=$(date +'%Y.%m.%d')" >> $GITHUB_ENV
+          echo "BUILD_HISTORY_LABEL=$(date +'%Y.%-m.%-d %H:%M')" >> $GITHUB_ENV
           # echo "release_tag=${{ github.ref_name }}-$(date +'%Y.%m.%d')-download" >> $GITHUB_ENV
           # echo "DEVICES=$(echo '${{ needs.generate-matrix.outputs.matrix }}' | jq -r '.include[].device' | tr '\n' ' ')" >> $GITHUB_ENV
           echo "BIN_PATH=openwrt/${{ env.DEVICE }}/${{ github.ref_name }}" >> $GITHUB_ENV
@@ -312,12 +317,81 @@ jobs:
           > The build took ${build_duration}.
           EOF
 
+      - name: Merge release body
+        env:
+          API_URL: ${{ github.api_url }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import pathlib
+          import urllib.error
+          import urllib.request
+
+          workspace = pathlib.Path(os.environ["GITHUB_WORKSPACE"])
+          release_text_path = workspace / "release-text"
+          package_summary_path = workspace / "package-summary.txt"
+          entry_path = workspace / "release-entry.md"
+          body_path = workspace / "release-body.md"
+
+          title = "[{label}][{arch}][{source}:{branch}]".format(
+              label=os.environ["BUILD_HISTORY_LABEL"],
+              arch=os.environ["ARCH"],
+              source=os.environ["SOURCE_REPO"],
+              branch=os.environ["SOURCE_BRANCH"],
+          )
+
+          release_text = ""
+          package_summary = ""
+          if release_text_path.exists():
+              release_text = release_text_path.read_text(encoding="utf-8").strip()
+          if package_summary_path.exists():
+              package_summary = package_summary_path.read_text(encoding="utf-8").strip()
+
+          current_entry = title
+          if release_text:
+              current_entry += "\n" + release_text
+          if package_summary:
+              current_entry += "\n\n" + package_summary
+          current_entry = current_entry.strip() + "\n"
+          entry_path.write_text(current_entry, encoding="utf-8")
+
+          api_url = os.environ["API_URL"].rstrip("/")
+          repo = os.environ["GITHUB_REPOSITORY"]
+          tag = os.environ["RELEASE_TARGET_TAG"]
+          token = os.environ["GITHUB_TOKEN"]
+          existing_body = ""
+          request = urllib.request.Request(
+              f"{api_url}/repos/{repo}/releases/tags/{tag}",
+              headers={
+                  "Authorization": f"Bearer {token}",
+                  "Accept": "application/vnd.github+json",
+                  "X-GitHub-Api-Version": "2022-11-28",
+              },
+          )
+
+          try:
+              with urllib.request.urlopen(request) as response:
+                  existing_body = (json.load(response).get("body") or "").strip()
+          except urllib.error.HTTPError as exc:
+              if exc.code != 404:
+                  raise
+
+          if existing_body:
+              merged_body = current_entry.rstrip() + "\n\n" + existing_body + "\n"
+          else:
+              merged_body = current_entry
+
+          body_path.write_text(merged_body, encoding="utf-8")
+          PY
+
       - name: Upload firmware to release
         uses: ncipollo/release-action@v1
         with:
-          name: "${{ env.FIRMWARE_NAME }} | ${{ env.DEVICE }}"
-          tag: "${{ env.RELEASE_TAG }}-${{ env.DEVICE }}"
-          bodyFile: ${{ github.workspace }}/release-text
+          name: "${{ env.RELEASE_NAME }}"
+          tag: "${{ env.RELEASE_TARGET_TAG }}"
+          bodyFile: ${{ github.workspace }}/release-body.md
           artifacts: ${{ env.PACKAGED_OUTPUTPATH }}/*
           allowUpdates: true
           replacesArtifacts: true
