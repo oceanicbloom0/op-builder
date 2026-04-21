@@ -5,16 +5,6 @@
     "TOOLCHAIN_TAG": "Toolchain"
   },
   {
-    "openwrt_source": "https://github.com/openwrt/openwrt.git",
-    "openwrt_source_branch": "main",
-    "TOOLCHAIN_TAG": "Toolchain"
-  },
-  {
-    "openwrt_source": "https://github.com/immortalwrt/immortalwrt.git",
-    "openwrt_source_branch": "master",
-    "TOOLCHAIN_TAG": "Toolchain"
-  },
-  {
     "openwrt_source": "https://github.com/immortalwrt/immortalwrt.git",
     "openwrt_source_branch": "openwrt-25.12",
     "TOOLCHAIN_TAG": "Toolchain"
