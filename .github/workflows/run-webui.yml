@@ -32,7 +32,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y jq qemu-system-x86 qemu-utils curl
+          sudo apt-get install -y jq qemu-system-x86 qemu-utils curl socat
 
       - name: Resolve bootable firmware URL
         env:
@@ -140,27 +140,46 @@ jobs:
         run: |
           set -euo pipefail
 
+          sudo ip tuntap add dev tap0 mode tap user "$USER"
+          sudo ip addr add 192.168.1.2/24 dev tap0
+          sudo ip link set tap0 up
+
           sudo qemu-system-x86_64 \
             -m 1024 \
             -smp 2 \
             -drive "file=$DISK_PATH,format=$DISK_FORMAT,if=ide,index=0,media=disk" \
-            -netdev user,id=wan,hostfwd=tcp::80-:80,hostfwd=tcp::2222-:22 \
-            -device e1000,netdev=wan \
+            -netdev tap,id=lan,ifname=tap0,script=no,downscript=no \
+            -device e1000,netdev=lan,mac=52:54:00:12:34:56 \
+            -netdev user,id=wan \
+            -device e1000,netdev=wan,mac=52:54:00:12:34:57 \
             -device virtio-rng-pci \
             -display none \
             -serial file:qemu-serial.log \
             -pidfile qemu.pid \
             -daemonize
 
-          echo "QEMU_PID=$(cat qemu.pid)" >> "$GITHUB_ENV"
+          for _ in $(seq 1 20); do
+            if [[ -s qemu.pid ]]; then
+              break
+            fi
+            sleep 1
+          done
 
-      - name: Wait for LuCI on port 80
+          if [[ ! -s qemu.pid ]]; then
+            echo "::error::QEMU pidfile was not created."
+            sudo tail -n 200 qemu-serial.log || true
+            exit 1
+          fi
+
+          echo "QEMU_PID=$(tr -d '\n' < qemu.pid)" >> "$GITHUB_ENV"
+
+      - name: Wait for LuCI on LAN
         run: |
           set -euo pipefail
 
-          for attempt in $(seq 1 60); do
-            if curl -fsS --max-time 5 http://127.0.0.1/ >/dev/null; then
-              echo "LuCI is reachable on http://127.0.0.1:80"
+          for attempt in $(seq 1 90); do
+            if curl -fsS --max-time 5 http://192.168.1.1/ >/dev/null; then
+              echo "LuCI is reachable on http://192.168.1.1:80"
               exit 0
             fi
 
@@ -170,12 +189,57 @@ jobs:
               exit 1
             fi
 
-            echo "Waiting for LuCI on port 80 (${attempt}/60)..."
+            echo "Waiting for LuCI on 192.168.1.1:80 (${attempt}/90)..."
             sleep 5
           done
 
-          echo "::error::Timed out waiting for LuCI on port 80."
+          echo "::error::Timed out waiting for LuCI on 192.168.1.1:80."
           sudo tail -n 200 qemu-serial.log || true
+          exit 1
+
+      - name: Expose host port 80 to LuCI
+        run: |
+          set -euo pipefail
+
+          sudo bash -c 'socat TCP-LISTEN:80,reuseaddr,fork TCP:192.168.1.1:80 > socat.log 2>&1 & echo $! > socat.pid'
+
+          for _ in $(seq 1 10); do
+            if [[ -s socat.pid ]]; then
+              break
+            fi
+            sleep 1
+          done
+
+          if [[ ! -s socat.pid ]]; then
+            echo "::error::socat pidfile was not created."
+            sudo cat socat.log || true
+            exit 1
+          fi
+
+          echo "SOCAT_PID=$(tr -d '\n' < socat.pid)" >> "$GITHUB_ENV"
+
+      - name: Verify host port 80
+        run: |
+          set -euo pipefail
+
+          for attempt in $(seq 1 20); do
+            if curl -fsS --max-time 5 http://127.0.0.1/ >/dev/null; then
+              echo "Host port 80 is forwarding to LuCI."
+              exit 0
+            fi
+
+            if ! sudo kill -0 "$(cat socat.pid)" 2>/dev/null; then
+              echo "::error::socat stopped before host port 80 became reachable."
+              sudo cat socat.log || true
+              exit 1
+            fi
+
+            echo "Waiting for host port 80 forwarding (${attempt}/20)..."
+            sleep 2
+          done
+
+          echo "::error::Timed out waiting for host port 80 forwarding."
+          sudo cat socat.log || true
           exit 1
 
       - name: Start Cloudflare tunnel
@@ -213,7 +277,7 @@ jobs:
           {
             echo
             echo "- Local LuCI: http://127.0.0.1:80"
-            echo "- Local SSH (runner only): ssh root@127.0.0.1 -p 2222"
+            echo "- VM LAN LuCI: http://192.168.1.1"
             if [[ -n "$PUBLIC_HOSTNAME" ]]; then
               echo "- Public LuCI: https://$PUBLIC_HOSTNAME"
             else
@@ -235,6 +299,12 @@ jobs:
               exit 1
             fi
 
+            if ! sudo kill -0 "$(cat socat.pid)" 2>/dev/null; then
+              echo "::error::socat stopped unexpectedly."
+              sudo cat socat.log || true
+              exit 1
+            fi
+
             if ! docker ps --format '{{.Names}}' | grep -qx cloudflared; then
               echo "::error::cloudflared stopped unexpectedly."
               docker logs cloudflared || true
@@ -247,5 +317,17 @@ jobs:
       - name: Dump logs on failure
         if: failure()
         run: |
-          docker logs cloudflared || true
+          docker ps -a --format '{{.Names}}' | grep -qx cloudflared && docker logs cloudflared || true
+          sudo cat socat.log || true
           sudo tail -n 200 qemu-serial.log || true
+
+      - name: Cleanup
+        if: always()
+        run: |
+          if [[ -s socat.pid ]]; then
+            sudo kill "$(cat socat.pid)" 2>/dev/null || true
+          fi
+          if [[ -s qemu.pid ]]; then
+            sudo kill "$(cat qemu.pid)" 2>/dev/null || true
+          fi
+          sudo ip link delete tap0 2>/dev/null || true
