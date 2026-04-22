@@ -3,50 +3,249 @@ name: Run WebUI
 on:
   workflow_dispatch:
     inputs:
-      rootfs_url:
-        description: "*x86-64-generic-rootfs.tar.gz URL"
-        required: true
+      image_url:
+        description: "Direct bootable image URL (*.img, *.img.gz, *.vmdk, *.vmdk.gz)"
+        required: false
+        default: ""
+      release_tag_url:
+        description: "GitHub release tag URL used to auto-select the latest x86-64 combined image"
+        required: false
+        default: "https://github.com/oceanicbloom0/op-builder/releases/tag/bins-x86-64"
+      asset_name_regex:
+        description: "Regex for selecting the bootable release asset"
+        required: false
+        default: "x86-64-generic-ext4-combined\\.img\\.gz$"
+      public_hostname:
+        description: "Optional public hostname already bound to your Cloudflare tunnel"
+        required: false
         default: ""
 
 jobs:
-  build_and_run:
+  run_in_vm:
     runs-on: ubuntu-latest
+    timeout-minutes: 360
+
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - name: Install jq
+      - name: Install dependencies
         run: |
+          set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y jq
+          sudo apt-get install -y jq qemu-system-x86 qemu-utils curl
 
-      - name: Determine Firmware URL
-        id: determine_url
+      - name: Resolve bootable firmware URL
+        env:
+          INPUT_IMAGE_URL: ${{ github.event.inputs.image_url }}
+          INPUT_RELEASE_TAG_URL: ${{ github.event.inputs.release_tag_url }}
+          INPUT_ASSET_NAME_REGEX: ${{ github.event.inputs.asset_name_regex }}
         run: |
-          FIRMWARE_URL="${{ github.event.inputs.rootfs_url }}"
-          echo "FIRMWARE_URL=$FIRMWARE_URL" >> $GITHUB_ENV
+          set -euo pipefail
 
-      - name: Download Firmware
-        run: |
-          curl -L "$FIRMWARE_URL" --output firmware.tar.gz
+          FIRMWARE_URL="${INPUT_IMAGE_URL}"
 
-      - name: Generate Dockerfile
-        run: |
-          cat << 'EOF' > Dockerfile
-          FROM scratch
-          LABEL maintainer=action
-          ARG FIRMWARE
-          ADD ${FIRMWARE} /
-          EXPOSE 80
-          # USER root
-          CMD ["/sbin/init"]
-          EOF
-          sed -i 's/^[ \t]*//' Dockerfile
+          if [[ -z "$FIRMWARE_URL" ]]; then
+            RELEASE_TAG_URL="${INPUT_RELEASE_TAG_URL}"
+            ASSET_REGEX="${INPUT_ASSET_NAME_REGEX}"
 
-      - name: Build Docker Image
-        run: |
-          docker build --build-arg FIRMWARE=firmware.tar.gz -t firmware:latest .
+            if [[ -z "$RELEASE_TAG_URL" ]]; then
+              echo "::error::image_url and release_tag_url cannot both be empty."
+              exit 1
+            fi
 
-      - name: Run Docker Container
+            if [[ "$RELEASE_TAG_URL" =~ ^https://github\.com/([^/]+)/([^/]+)/releases/tag/([^/?#]+)/?$ ]]; then
+              OWNER="${BASH_REMATCH[1]}"
+              REPO="${BASH_REMATCH[2]}"
+              TAG="${BASH_REMATCH[3]}"
+            else
+              echo "::error::release_tag_url must look like https://github.com/<owner>/<repo>/releases/tag/<tag>"
+              exit 1
+            fi
+
+            API_URL="https://api.github.com/repos/${OWNER}/${REPO}/releases/tags/${TAG}"
+            curl -fsSL \
+              -H "Accept: application/vnd.github+json" \
+              -H "User-Agent: run-webui-workflow" \
+              "$API_URL" \
+              -o release.json
+
+            FIRMWARE_NAME="$(jq -r --arg regex "$ASSET_REGEX" '.assets | map(select(.name | test($regex))) | sort_by(.name) | last | .name // empty' release.json)"
+            FIRMWARE_URL="$(jq -r --arg regex "$ASSET_REGEX" '.assets | map(select(.name | test($regex))) | sort_by(.name) | last | .browser_download_url // empty' release.json)"
+
+            if [[ -z "$FIRMWARE_URL" ]]; then
+              echo "::error::No release asset matched regex: $ASSET_REGEX"
+              echo "::group::Release assets"
+              jq -r '.assets[].name' release.json
+              echo "::endgroup::"
+              exit 1
+            fi
+          else
+            FIRMWARE_NAME="$(basename "${FIRMWARE_URL%%\?*}")"
+          fi
+
+          echo "FIRMWARE_NAME=$FIRMWARE_NAME" >> "$GITHUB_ENV"
+          echo "FIRMWARE_URL=$FIRMWARE_URL" >> "$GITHUB_ENV"
+
+          {
+            echo "## OpenWrt Preview"
+            echo
+            echo "- Firmware: \`$FIRMWARE_NAME\`"
+            echo "- Source: $FIRMWARE_URL"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Download firmware
         run: |
-          docker run -d --hostname OpenWrt --name firmware_container -p 80:80 firmware:latest
-          docker run --net=host cloudflare/cloudflared:latest tunnel --no-autoupdate run --token ${{ secrets.CLOUDFLARED_TOKEN }} > /dev/null 2>&1
+          set -euo pipefail
+          curl -fL --retry 5 --retry-delay 3 "$FIRMWARE_URL" -o firmware.download
+
+      - name: Prepare disk image
+        run: |
+          set -euo pipefail
+
+          FILENAME="$(basename "${FIRMWARE_URL%%\?*}")"
+
+          case "$FILENAME" in
+            *.img.gz)
+              gunzip -c firmware.download > firmware.img
+              DISK_PATH="$PWD/firmware.img"
+              DISK_FORMAT="raw"
+              ;;
+            *.img)
+              mv firmware.download firmware.img
+              DISK_PATH="$PWD/firmware.img"
+              DISK_FORMAT="raw"
+              ;;
+            *.vmdk.gz)
+              gunzip -c firmware.download > firmware.vmdk
+              DISK_PATH="$PWD/firmware.vmdk"
+              DISK_FORMAT="vmdk"
+              ;;
+            *.vmdk)
+              mv firmware.download firmware.vmdk
+              DISK_PATH="$PWD/firmware.vmdk"
+              DISK_FORMAT="vmdk"
+              ;;
+            *)
+              echo "::error::Unsupported image format: $FILENAME"
+              exit 1
+              ;;
+          esac
+
+          qemu-img info "$DISK_PATH"
+
+          echo "DISK_PATH=$DISK_PATH" >> "$GITHUB_ENV"
+          echo "DISK_FORMAT=$DISK_FORMAT" >> "$GITHUB_ENV"
+
+      - name: Boot OpenWrt in QEMU
+        run: |
+          set -euo pipefail
+
+          sudo qemu-system-x86_64 \
+            -m 1024 \
+            -smp 2 \
+            -drive "file=$DISK_PATH,format=$DISK_FORMAT,if=ide,index=0,media=disk" \
+            -netdev user,id=wan,hostfwd=tcp::80-:80,hostfwd=tcp::2222-:22 \
+            -device e1000,netdev=wan \
+            -device virtio-rng-pci \
+            -display none \
+            -serial file:qemu-serial.log \
+            -pidfile qemu.pid \
+            -daemonize
+
+          echo "QEMU_PID=$(cat qemu.pid)" >> "$GITHUB_ENV"
+
+      - name: Wait for LuCI on port 80
+        run: |
+          set -euo pipefail
+
+          for attempt in $(seq 1 60); do
+            if curl -fsS --max-time 5 http://127.0.0.1/ >/dev/null; then
+              echo "LuCI is reachable on http://127.0.0.1:80"
+              exit 0
+            fi
+
+            if ! sudo kill -0 "$(cat qemu.pid)" 2>/dev/null; then
+              echo "::error::QEMU exited before LuCI became reachable."
+              sudo tail -n 200 qemu-serial.log || true
+              exit 1
+            fi
+
+            echo "Waiting for LuCI on port 80 (${attempt}/60)..."
+            sleep 5
+          done
+
+          echo "::error::Timed out waiting for LuCI on port 80."
+          sudo tail -n 200 qemu-serial.log || true
+          exit 1
+
+      - name: Start Cloudflare tunnel
+        env:
+          CLOUDFLARED_TOKEN: ${{ secrets.CLOUDFLARED_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "$CLOUDFLARED_TOKEN" ]]; then
+            echo "::error::Missing secret CLOUDFLARED_TOKEN"
+            exit 1
+          fi
+
+          docker run -d \
+            --name cloudflared \
+            --restart unless-stopped \
+            --network host \
+            cloudflare/cloudflared:latest \
+            tunnel --no-autoupdate run --token "$CLOUDFLARED_TOKEN"
+
+          sleep 5
+
+          if ! docker ps --format '{{.Names}}' | grep -qx cloudflared; then
+            echo "::error::cloudflared failed to stay running."
+            docker logs cloudflared || true
+            exit 1
+          fi
+
+      - name: Publish access info
+        env:
+          PUBLIC_HOSTNAME: ${{ github.event.inputs.public_hostname }}
+        run: |
+          set -euo pipefail
+
+          {
+            echo
+            echo "- Local LuCI: http://127.0.0.1:80"
+            echo "- Local SSH (runner only): ssh root@127.0.0.1 -p 2222"
+            if [[ -n "$PUBLIC_HOSTNAME" ]]; then
+              echo "- Public LuCI: https://$PUBLIC_HOSTNAME"
+            else
+              echo "- Public LuCI: use the hostname already configured on this Cloudflare token tunnel"
+            fi
+            echo "- Note: this job stays alive to keep the VM and tunnel online"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          cat "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep preview alive
+        run: |
+          set -euo pipefail
+
+          while true; do
+            if ! sudo kill -0 "$(cat qemu.pid)" 2>/dev/null; then
+              echo "::error::QEMU stopped unexpectedly."
+              sudo tail -n 200 qemu-serial.log || true
+              exit 1
+            fi
+
+            if ! docker ps --format '{{.Names}}' | grep -qx cloudflared; then
+              echo "::error::cloudflared stopped unexpectedly."
+              docker logs cloudflared || true
+              exit 1
+            fi
+
+            sleep 30
+          done
+
+      - name: Dump logs on failure
+        if: failure()
+        run: |
+          docker logs cloudflared || true
+          sudo tail -n 200 qemu-serial.log || true
