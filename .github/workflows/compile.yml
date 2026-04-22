@@ -153,9 +153,13 @@ jobs:
       - name: Generate release metadata
         run: |
           SOURCE_REPO="$(basename "$SOURCE_URL" .git)"
+          SOURCE_REPO_SAFE="$(echo "$SOURCE_REPO" | sed 's#[^A-Za-z0-9._-]#-#g')"
+          SOURCE_BRANCH_SAFE="$(echo "$SOURCE_BRANCH" | sed 's#[^A-Za-z0-9._-]#-#g')"
           echo "SOURCE_REPO=$SOURCE_REPO" >> $GITHUB_ENV
-          echo "RELEASE_TARGET_TAG=${RELEASE_TAG}-${DEVICE}-${ARCH}-${SOURCE_REPO}-${SOURCE_BRANCH}" >> $GITHUB_ENV
-          echo "RELEASE_NAME=${FIRMWARE_NAME} | ${DEVICE} | ${ARCH} | ${SOURCE_REPO}:${SOURCE_BRANCH}" >> $GITHUB_ENV
+          echo "SOURCE_REPO_SAFE=$SOURCE_REPO_SAFE" >> $GITHUB_ENV
+          echo "SOURCE_BRANCH_SAFE=$SOURCE_BRANCH_SAFE" >> $GITHUB_ENV
+          echo "RELEASE_TARGET_TAG=${RELEASE_TAG}-${DEVICE}-${ARCH}-${SOURCE_REPO_SAFE}-${SOURCE_BRANCH_SAFE}" >> $GITHUB_ENV
+          echo "RELEASE_NAME=${FIRMWARE_NAME} [${ARCH}][${SOURCE_REPO_SAFE}-${SOURCE_BRANCH_SAFE}]" >> $GITHUB_ENV
 
       - name: Mount toolchain
         run: |
@@ -285,6 +289,13 @@ jobs:
 
           echo "PACKAGED_OUTPUTPATH=$PWD" >> $GITHUB_ENV
 
+      - name: Add .config to release artifacts
+        run: |
+          FIRST_ARTIFACT="$(find "$PACKAGED_OUTPUTPATH" -maxdepth 1 -type f | sort | head -n 1)"
+          FIRST_ARTIFACT_NAME="$(basename "$FIRST_ARTIFACT")"
+          BUILD_TAG="${FIRST_ARTIFACT_NAME%%${FIRMWARE_NAME}*}"
+          cp "$OPENWRT_PATH/.config" "$PACKAGED_OUTPUTPATH/${BUILD_TAG}${FIRMWARE_NAME}.config"
+
       - name: Package Armvirt as OpenWrt
         if: ${{env.DEVICE=='n1'}}
         uses: ophub/flippy-openwrt-actions@main
@@ -310,10 +321,9 @@ jobs:
           seconds=$((duration % 60))
           echo "build_duration=${minutes} minutes and ${seconds} seconds" >> $GITHUB_ENV
 
-      - name: Generate release-text
+      - name: Generate build duration note
         run: |
-          cat <<EOF >> release-text
-          > ### Build Info (Last Build)
+          cat <<EOF > build-duration.txt
           > The build took ${build_duration}.
           EOF
 
@@ -330,28 +340,34 @@ jobs:
           import urllib.request
 
           workspace = pathlib.Path(os.environ["GITHUB_WORKSPACE"])
+          build_duration_path = workspace / "build-duration.txt"
           release_text_path = workspace / "release-text"
           package_summary_path = workspace / "package-summary.txt"
           entry_path = workspace / "release-entry.md"
           body_path = workspace / "release-body.md"
 
-          title = "[{label}][{arch}][{source}:{branch}]".format(
+          title = "## [{label}][{arch}][{source}:{branch}]".format(
               label=os.environ["BUILD_HISTORY_LABEL"],
               arch=os.environ["ARCH"],
               source=os.environ["SOURCE_REPO"],
               branch=os.environ["SOURCE_BRANCH"],
           )
 
+          build_duration = ""
           release_text = ""
           package_summary = ""
+          if build_duration_path.exists():
+              build_duration = build_duration_path.read_text(encoding="utf-8").strip()
           if release_text_path.exists():
               release_text = release_text_path.read_text(encoding="utf-8").strip()
           if package_summary_path.exists():
               package_summary = package_summary_path.read_text(encoding="utf-8").strip()
 
           current_entry = title
+          if build_duration:
+              current_entry += "\n" + build_duration
           if release_text:
-              current_entry += "\n" + release_text
+              current_entry += "\n\n" + release_text
           if package_summary:
               current_entry += "\n\n" + package_summary
           current_entry = current_entry.strip() + "\n"

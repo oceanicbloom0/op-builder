@@ -22,6 +22,6 @@ for file in *; do
         suffix="$file"
     fi
 
-    newname="${BUILD_TAG}-${FIRMWARE_NAME}${suffix}"
+    newname="${BUILD_TAG}${FIRMWARE_NAME}${suffix}"
     mv -- "$file" "$newname"
 done
