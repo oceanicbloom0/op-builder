@@ -158,8 +158,8 @@ jobs:
           echo "SOURCE_REPO=$SOURCE_REPO" >> $GITHUB_ENV
           echo "SOURCE_REPO_SAFE=$SOURCE_REPO_SAFE" >> $GITHUB_ENV
           echo "SOURCE_BRANCH_SAFE=$SOURCE_BRANCH_SAFE" >> $GITHUB_ENV
-          echo "RELEASE_TARGET_TAG=${RELEASE_TAG}-${DEVICE}-${ARCH}-${SOURCE_REPO_SAFE}-${SOURCE_BRANCH_SAFE}" >> $GITHUB_ENV
-          echo "RELEASE_NAME=${FIRMWARE_NAME} [${ARCH}][${SOURCE_REPO_SAFE}-${SOURCE_BRANCH_SAFE}]" >> $GITHUB_ENV
+          echo "RELEASE_TARGET_TAG=${RELEASE_TAG}-${DEVICE}-${ARCH}" >> $GITHUB_ENV
+          echo "RELEASE_NAME=${FIRMWARE_NAME} [${DEVICE}-${ARCH}]" >> $GITHUB_ENV
 
       - name: Mount toolchain
         run: |
@@ -346,8 +346,9 @@ jobs:
           entry_path = workspace / "release-entry.md"
           body_path = workspace / "release-body.md"
 
-          title = "## [{label}][{arch}][{source}:{branch}]".format(
+          title = "## [{label}][{device}-{arch}][{source}:{branch}]".format(
               label=os.environ["BUILD_HISTORY_LABEL"],
+              device=os.environ["DEVICE"],
               arch=os.environ["ARCH"],
               source=os.environ["SOURCE_REPO"],
               branch=os.environ["SOURCE_BRANCH"],
