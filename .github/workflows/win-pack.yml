@@ -21,6 +21,11 @@ on:
         required: true
         default: true
         type: boolean
+      include_office_payload:
+        description: "Download Office offline files, pack them into the image, and install on first logon"
+        required: true
+        default: true
+        type: boolean
       runner:
         description: "Runner type"
         required: true
@@ -122,6 +127,7 @@ jobs:
           WINDOWS_LANGUAGE: ${{ github.event.inputs.windows_language }}
           USE_ESD_COMPRESSION: ${{ github.event.inputs.use_esd_compression }}
           INJECT_FILES: ${{ github.event.inputs.inject_files }}
+          INCLUDE_OFFICE_PAYLOAD: ${{ github.event.inputs.include_office_payload || 'true' }}
           SOURCE_ISO_PATH: ${{ github.event.inputs.source_iso_path }}
           OUTPUT_WIM_NAME: ${{ github.event.inputs.output_wim_name }}
           OUTPUT_ISO_NAME: ${{ github.event.inputs.output_iso_name }}
@@ -137,7 +143,7 @@ jobs:
             -WindowsLanguage $env:WINDOWS_LANGUAGE `
             -OutputWimName $env:OUTPUT_WIM_NAME `
             -OutputIsoName $env:OUTPUT_ISO_NAME `
-            -IncludeOfficePayload $true `
+            -IncludeOfficePayload ([System.Convert]::ToBoolean($env:INCLUDE_OFFICE_PAYLOAD)) `
             -PackageIso $true `
             -UseEsdCompression ([System.Convert]::ToBoolean($env:USE_ESD_COMPRESSION)) `
             -InjectFiles ([System.Convert]::ToBoolean($env:INJECT_FILES)) `
