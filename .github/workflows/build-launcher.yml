@@ -107,7 +107,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ${{ steps.winlibs-path.outputs.dir }}
-          key: winlibs
+          key: winlibs-${{ github.run_id }}
 
       - name: Cleanup
         if: always()
