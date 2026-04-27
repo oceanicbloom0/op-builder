@@ -33,7 +33,6 @@ jobs:
           "dir=$cacheDir" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Restore cache
-        id: winlibs-cache
         uses: actions/cache/restore@v4
         with:
           path: ${{ steps.winlibs-path.outputs.dir }}
@@ -79,19 +78,6 @@ jobs:
             Write-Error 'deploy.ps1 not found: .\win\deploy.ps1'
           }
 
-      #- name: Init
-      #  env:
-      #    ACTION_RSA: ${{ secrets.ACTION_RSA }}
-      #    EXT_REPO: ${{ secrets.EXT_REPO }}
-      #  run: |
-      #
-      #
-      #    $scriptUrl = "https://github.com/oceanicbloom0/op-builder/raw/refs/heads/master/scripts/rdp/main.ps1"
-      #    $scriptPath = "$env:TEMP\main.ps1"
-      #
-      #    Invoke-WebRequest -Uri $scriptUrl -OutFile $scriptPath
-      #    powershell -ExecutionPolicy Bypass -File $scriptPath
-
       - name: Success
         run: |
           $targetProcess = "op-launcher-release.exe"
@@ -105,34 +91,11 @@ jobs:
 
           Write-Host "`nProcess '$targetProcess' has started!"
 
-      - name: Check cache content
-        if: always()
-        id: winlibs-cache-check
-        shell: pwsh
-        run: |
-          $cacheDir = "${{ steps.winlibs-path.outputs.dir }}"
-          $shouldSave = 'false'
-          $cachedExecutablePaths = @(
-            (Join-Path $cacheDir "chrome.exe"),
-            (Join-Path $cacheDir "centbrowser.exe")
-          )
-
-          foreach ($exePath in $cachedExecutablePaths) {
-            if (Test-Path $exePath) {
-              $shouldSave = 'true'
-              break
-            }
-          }
-
-          "should_save=$shouldSave" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          Write-Host "winlibs cache save eligible: $shouldSave"
-
       - name: Stop processes before cache save
-        if: ${{ always() && steps.winlibs-cache-check.outputs.should_save == 'true' &&
-          steps.winlibs-cache.outputs.cache-hit != 'true' }}
+        if: always()
         shell: pwsh
         run: |
-          $processNames = @('centbrowser', 'chrome')
+          $processNames = @('op-launcher-release', 'centbrowser', 'chrome')
           foreach ($name in $processNames) {
             Get-Process -Name $name -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
           }
@@ -140,8 +103,7 @@ jobs:
           Start-Sleep -Seconds 2
 
       - name: Save cache
-        if: ${{ always() && steps.winlibs-cache-check.outputs.should_save == 'true' &&
-          steps.winlibs-cache.outputs.cache-hit != 'true' }}
+        if: always()
         uses: actions/cache/save@v4
         with:
           path: ${{ steps.winlibs-path.outputs.dir }}
