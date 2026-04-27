@@ -38,11 +38,9 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ${{ steps.centbrowser-path.outputs.dir }}
-          key: centbrowser-${{ runner.os }}-${{ github.event.inputs.runner }}-${{
-            github.ref_name }}-${{ github.run_id }}
+          key: centbrowser-${{ github.run_id }}
           restore-keys: |
-            centbrowser-${{ runner.os }}-${{ github.event.inputs.runner }}-${{ github.ref_name }}-
-            centbrowser-${{ runner.os }}-${{ github.event.inputs.runner }}-
+            centbrowser-
 
       - name: Fetch external repo
         shell: pwsh
@@ -135,8 +133,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ${{ steps.centbrowser-path.outputs.dir }}
-          key: centbrowser-${{ runner.os }}-${{ github.event.inputs.runner }}-${{
-            github.ref_name }}-${{ github.run_id }}
+          key: centbrowser-${{ github.run_id }}
 
       - name: Clean up
         if: always()
