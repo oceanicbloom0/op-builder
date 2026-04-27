@@ -113,8 +113,7 @@ jobs:
           $cacheDir = "${{ steps.winlibs-path.outputs.dir }}"
           $shouldSave = 'false'
           $cachedExecutablePaths = @(
-            (Join-Path $cacheDir "chrome.exe"),
-            (Join-Path $cacheDir "centbrowser.exe")
+            (Join-Path $cacheDir "chrome.exe")
           )
 
           foreach ($exePath in $cachedExecutablePaths) {
