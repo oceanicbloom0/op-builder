@@ -113,7 +113,8 @@ jobs:
           $cacheDir = "${{ steps.winlibs-path.outputs.dir }}"
           $shouldSave = 'false'
           $cachedExecutablePaths = @(
-            (Join-Path $cacheDir "chrome.exe")
+            (Join-Path $cacheDir "chrome.exe"),
+            (Join-Path $cacheDir "centbrowser.exe")
           )
 
           foreach ($exePath in $cachedExecutablePaths) {
@@ -131,7 +132,7 @@ jobs:
           steps.winlibs-cache.outputs.cache-hit != 'true' }}
         shell: pwsh
         run: |
-          $processNames = @('centbrowser')
+          $processNames = @('centbrowser', 'chrome')
           foreach ($name in $processNames) {
             Get-Process -Name $name -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
           }
