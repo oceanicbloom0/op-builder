@@ -8,9 +8,11 @@ on:
         required: false
         default: ""
       release_tag_url:
-        description: "GitHub release tag URL used to auto-select the latest x86-64 combined image"
+        description: "GitHub release tag URL used to auto-select the latest x86-64
+          combined image"
         required: false
-        default: "https://github.com/oceanicbloom0/op-builder/releases/tag/bins-x86-64"
+        default: "https://github.com/oceanicbloom0/op-builder/releases/tag/bins-x86-64-\
+          x86_64"
       asset_name_regex:
         description: "Regex for selecting the bootable release asset"
         required: false
