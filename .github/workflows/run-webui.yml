@@ -173,7 +173,7 @@ jobs:
             exit 1
           fi
 
-          echo "QEMU_PID=$(tr -d '\n' < qemu.pid)" >> "$GITHUB_ENV"
+          echo "QEMU_PID=$(sudo tr -d '\n' < qemu.pid)" >> "$GITHUB_ENV"
 
       - name: Wait for LuCI on LAN
         run: |
@@ -185,7 +185,7 @@ jobs:
               exit 0
             fi
 
-            if ! sudo kill -0 "$(cat qemu.pid)" 2>/dev/null; then
+            if ! sudo kill -0 "${QEMU_PID}" 2>/dev/null; then
               echo "::error::QEMU exited before LuCI became reachable."
               sudo tail -n 200 qemu-serial.log || true
               exit 1
@@ -295,7 +295,7 @@ jobs:
           set -euo pipefail
 
           while true; do
-            if ! sudo kill -0 "$(cat qemu.pid)" 2>/dev/null; then
+            if ! sudo kill -0 "${QEMU_PID}" 2>/dev/null; then
               echo "::error::QEMU stopped unexpectedly."
               sudo tail -n 200 qemu-serial.log || true
               exit 1
@@ -329,7 +329,7 @@ jobs:
           if [[ -s socat.pid ]]; then
             sudo kill "$(cat socat.pid)" 2>/dev/null || true
           fi
-          if [[ -s qemu.pid ]]; then
-            sudo kill "$(cat qemu.pid)" 2>/dev/null || true
+          if [[ -n "${QEMU_PID:-}" ]]; then
+            sudo kill "${QEMU_PID}" 2>/dev/null || true
           fi
           sudo ip link delete tap0 2>/dev/null || true
