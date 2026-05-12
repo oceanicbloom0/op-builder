@@ -24,7 +24,7 @@ on:
       include_office_payload:
         description: "Download Office offline files, pack them into the image, and install on first logon"
         required: true
-        default: true
+        default: false
         type: boolean
       runner:
         description: "Runner type"
