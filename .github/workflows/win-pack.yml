@@ -34,9 +34,10 @@ on:
       runner:
         description: "Runner type"
         required: true
-        default: "windows-2025"
+        default: "windows-latest"
         type: choice
         options:
+          - windows-latest
           - windows-2022
           - windows-2025
           - windows-2025-vs2026
@@ -67,7 +68,7 @@ on:
 
 jobs:
   pack:
-    runs-on: ${{ github.event.inputs.runner || 'windows-2022' }}
+    runs-on: ${{ github.event.inputs.runner || 'windows-latest' }}
 
     steps:
       - name: Prepare directories
