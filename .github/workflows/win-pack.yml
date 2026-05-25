@@ -11,15 +11,20 @@ on:
         required: true
         default: false
         type: boolean
-      use_esd_compression:
-        description: "Use ESD compression for smaller ISO size (slower)"
-        required: true
-        default: false
-        type: boolean
       inject_files:
         description: "Inject files from InjectFiles directory"
         required: true
         default: true
+        type: boolean
+      preplace_installers:
+        description: "Download and place installer packages on the desktop"
+        required: true
+        default: true
+        type: boolean
+      download_tubatools:
+        description: "Download tubatools to the desktop"
+        required: true
+        default: false
         type: boolean
       include_office_payload:
         description: "Download Office offline files, pack them into the image, and install on first logon"
@@ -43,14 +48,6 @@ on:
         options:
           - "10"
           - "11"
-      windows_edition:
-        description: "Windows edition"
-        required: true
-        default: "Consumer"
-        type: choice
-        options:
-          - "Consumer"
-          - "LTSC"
       windows_language:
         description: "Windows language code"
         required: true
@@ -63,10 +60,6 @@ on:
         description: "Custom source ISO path or URL (leave empty to auto-download)"
         required: false
         default: ""
-      output_wim_name:
-        description: "Output WIM filename"
-        required: true
-        default: "custom-install.wim"
       output_iso_name:
         description: "Output ISO filename (if package_iso=true)"
         required: true
@@ -122,15 +115,14 @@ jobs:
       - name: Build Windows image
         shell: pwsh
         env:
-          WINDOWS_VERSION: ${{ github.event.inputs.windows_version }}
-          WINDOWS_EDITION: ${{ github.event.inputs.windows_edition }}
-          WINDOWS_LANGUAGE: ${{ github.event.inputs.windows_language }}
-          USE_ESD_COMPRESSION: ${{ github.event.inputs.use_esd_compression }}
-          INJECT_FILES: ${{ github.event.inputs.inject_files }}
+          WINDOWS_VERSION: ${{ github.event.inputs.windows_version || '11' }}
+          WINDOWS_LANGUAGE: ${{ github.event.inputs.windows_language || 'zh-cn' }}
+          INJECT_FILES: ${{ github.event.inputs.inject_files || 'true' }}
+          PREPLACE_INSTALLERS: ${{ github.event.inputs.preplace_installers || 'true' }}
+          DOWNLOAD_TUBATOOLS: ${{ github.event.inputs.download_tubatools || 'false' }}
           INCLUDE_OFFICE_PAYLOAD: ${{ github.event.inputs.include_office_payload || 'true' }}
-          SOURCE_ISO_PATH: ${{ github.event.inputs.source_iso_path }}
-          OUTPUT_WIM_NAME: ${{ github.event.inputs.output_wim_name }}
-          OUTPUT_ISO_NAME: ${{ github.event.inputs.output_iso_name }}
+          SOURCE_ISO_PATH: ${{ github.event.inputs.source_iso_path || '' }}
+          OUTPUT_ISO_NAME: ${{ github.event.inputs.output_iso_name || 'custom-install.iso' }}
         run: |
           $ErrorActionPreference = "Stop"
           $root = $env:WORK_ROOT
@@ -139,13 +131,12 @@ jobs:
           & $buildScript `
             -WorkRoot $root `
             -WindowsVersion $env:WINDOWS_VERSION `
-            -WindowsEdition $env:WINDOWS_EDITION `
             -WindowsLanguage $env:WINDOWS_LANGUAGE `
-            -OutputWimName $env:OUTPUT_WIM_NAME `
             -OutputIsoName $env:OUTPUT_ISO_NAME `
             -IncludeOfficePayload ([System.Convert]::ToBoolean($env:INCLUDE_OFFICE_PAYLOAD)) `
             -PackageIso $true `
-            -UseEsdCompression ([System.Convert]::ToBoolean($env:USE_ESD_COMPRESSION)) `
+            -PreplaceInstallers ([System.Convert]::ToBoolean($env:PREPLACE_INSTALLERS)) `
+            -DownloadTubaTools ([System.Convert]::ToBoolean($env:DOWNLOAD_TUBATOOLS)) `
             -InjectFiles ([System.Convert]::ToBoolean($env:INJECT_FILES)) `
             -SourceIsoPath $env:SOURCE_ISO_PATH
 
