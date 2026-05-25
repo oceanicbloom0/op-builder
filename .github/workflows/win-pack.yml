@@ -29,7 +29,7 @@ on:
       add_oem_information:
         description: "Add custom OEM information to system properties"
         required: true
-        default: true
+        default: false
         type: boolean
       include_office_payload:
         description: "Download Office offline files, pack them into the image, and install on first logon"
@@ -126,7 +126,7 @@ jobs:
           INJECT_FILES: ${{ github.event.inputs.inject_files || 'true' }}
           PREPLACE_COMMON_APPS: ${{ github.event.inputs.preplace_common_apps || 'true' }}
           PREPLACE_TUBATOOLS: ${{ github.event.inputs.preplace_tubatools || 'false' }}
-          ADD_OEM_INFORMATION: ${{ github.event.inputs.add_oem_information || 'true' }}
+          ADD_OEM_INFORMATION: ${{ github.event.inputs.add_oem_information || 'false' }}
           INCLUDE_OFFICE_PAYLOAD: ${{ github.event.inputs.include_office_payload || 'true' }}
           SOURCE_ISO_PATH: ${{ github.event.inputs.source_iso_path || '' }}
           OUTPUT_ISO_NAME: ${{ github.event.inputs.output_iso_name || 'custom-install.iso' }}
