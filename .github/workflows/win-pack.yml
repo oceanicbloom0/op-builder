@@ -16,13 +16,13 @@ on:
         required: true
         default: true
         type: boolean
-      preplace_installers:
-        description: "Download and place installer packages on the desktop"
+      preplace_common_apps:
+        description: "Preplace common app installers on the desktop"
         required: true
         default: true
         type: boolean
-      download_tubatools:
-        description: "Download tubatools to the desktop"
+      preplace_tubatools:
+        description: "Preplace tubatools on the desktop"
         required: true
         default: false
         type: boolean
@@ -118,8 +118,8 @@ jobs:
           WINDOWS_VERSION: ${{ github.event.inputs.windows_version || '11' }}
           WINDOWS_LANGUAGE: ${{ github.event.inputs.windows_language || 'zh-cn' }}
           INJECT_FILES: ${{ github.event.inputs.inject_files || 'true' }}
-          PREPLACE_INSTALLERS: ${{ github.event.inputs.preplace_installers || 'true' }}
-          DOWNLOAD_TUBATOOLS: ${{ github.event.inputs.download_tubatools || 'false' }}
+          PREPLACE_COMMON_APPS: ${{ github.event.inputs.preplace_common_apps || 'true' }}
+          PREPLACE_TUBATOOLS: ${{ github.event.inputs.preplace_tubatools || 'false' }}
           INCLUDE_OFFICE_PAYLOAD: ${{ github.event.inputs.include_office_payload || 'true' }}
           SOURCE_ISO_PATH: ${{ github.event.inputs.source_iso_path || '' }}
           OUTPUT_ISO_NAME: ${{ github.event.inputs.output_iso_name || 'custom-install.iso' }}
@@ -135,8 +135,8 @@ jobs:
             -OutputIsoName $env:OUTPUT_ISO_NAME `
             -IncludeOfficePayload ([System.Convert]::ToBoolean($env:INCLUDE_OFFICE_PAYLOAD)) `
             -PackageIso $true `
-            -PreplaceInstallers ([System.Convert]::ToBoolean($env:PREPLACE_INSTALLERS)) `
-            -DownloadTubaTools ([System.Convert]::ToBoolean($env:DOWNLOAD_TUBATOOLS)) `
+            -PreplaceCommonApps ([System.Convert]::ToBoolean($env:PREPLACE_COMMON_APPS)) `
+            -PreplaceTubaTools ([System.Convert]::ToBoolean($env:PREPLACE_TUBATOOLS)) `
             -InjectFiles ([System.Convert]::ToBoolean($env:INJECT_FILES)) `
             -SourceIsoPath $env:SOURCE_ISO_PATH
 
