@@ -163,18 +163,60 @@ jobs:
 
       - name: Webhook callback
         if: ${{ success() }}
-        shell: bash
+        shell: pwsh
+        env:
+          PVE_WEBHOOK_URL: ${{ secrets.PVE_WEBHOOK_URL }}
+          PVE_WEBHOOK_TOKEN: ${{ secrets.PVE_WEBHOOK_TOKEN }}
         run: |
-          curl -fsS -X POST "${{ secrets.PVE_WEBHOOK_URL }}" \
-            -H "Authorization: Bearer ${{ secrets.PVE_WEBHOOK_TOKEN }}" \
-            -H "Content-Type: application/json" \
-            -d '{
-              "context": {
-                "run_id": "${{ github.run_id }}",
-                "run_number": "${{ github.run_number }}",
-                "sha": "${{ github.sha }}"
-              }
-            }'
+          $ErrorActionPreference = "Stop"
+
+          $triggerUrl = $env:PVE_WEBHOOK_URL.Trim()
+          $baseUrl = $triggerUrl -replace '\?.*$', ''
+          $baseUrl = $baseUrl -replace '/trigger$', ''
+
+          $headers = @{
+            Authorization = "Bearer $env:PVE_WEBHOOK_TOKEN"
+          }
+          $body = @{
+            context = @{
+              run_id = $env:GITHUB_RUN_ID
+              run_number = $env:GITHUB_RUN_NUMBER
+              sha = $env:GITHUB_SHA
+            }
+          } | ConvertTo-Json -Depth 5
+
+          $response = Invoke-RestMethod `
+            -Method Post `
+            -Uri $triggerUrl `
+            -Headers $headers `
+            -ContentType "application/json" `
+            -Body $body
+
+          $jobId = $response.job_id
+          if (-not $jobId) {
+            throw "callback: webhook did not return a job id."
+          }
+
+          Write-Host "callback: download job queued."
+          $deadline = (Get-Date).AddHours(2)
+
+          while ((Get-Date) -lt $deadline) {
+            Start-Sleep -Seconds 15
+            $job = Invoke-RestMethod -Method Get -Uri "$baseUrl/jobs/$jobId"
+            $status = [string]$job.status
+            Write-Host "callback: download status: $status"
+
+            if ($status -eq "completed") {
+              Write-Host "callback: download completed."
+              exit 0
+            }
+
+            if ($status -eq "failed") {
+              throw "callback: download failed."
+            }
+          }
+
+          throw "Timed out waiting for callback: download job."
       
       # - name: Compress files
       #   if: ${{ !inputs.test_mode }}
