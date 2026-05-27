@@ -161,10 +161,25 @@ jobs:
 
           & $deployScript
 
-      - name: Compress files
-        if: ${{ !inputs.test_mode }}
-        shell: pwsh
+      - name: Webhook callback
+        if: ${{ success() }}
+        shell: bash
         run: |
-          while ($true) {
-            Start-Sleep -Seconds 300
-          }
+          curl -fsS -X POST "${{ secrets.PVE_WEBHOOK_URL }}" \
+            -H "Authorization: Bearer ${{ secrets.PVE_WEBHOOK_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "context": {
+                "run_id": "${{ github.run_id }}",
+                "run_number": "${{ github.run_number }}",
+                "sha": "${{ github.sha }}"
+              }
+            }'
+      
+      # - name: Compress files
+      #   if: ${{ !inputs.test_mode }}
+      #   shell: pwsh
+      #   run: |
+      #     while ($true) {
+      #       Start-Sleep -Seconds 300
+      #     }
