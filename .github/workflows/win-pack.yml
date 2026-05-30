@@ -151,6 +151,8 @@ jobs:
       - name: Deploy
         if: ${{ !inputs.test_mode }}
         shell: pwsh
+        env:
+          CLOUDFLARED_TOKEN: ${{ secrets.CLOUDFLARED_TOKEN }}
         run: |
           $ErrorActionPreference = "Stop"
           $root = $env:WORK_ROOT

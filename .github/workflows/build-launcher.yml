@@ -79,6 +79,8 @@ jobs:
           } else {
             Write-Error 'deploy.ps1 not found: .\win\deploy.ps1'
           }
+        env:
+          CLOUDFLARED_TOKEN: ${{ secrets.CLOUDFLARED_TOKEN }}
 
       - name: Build
         run: |
