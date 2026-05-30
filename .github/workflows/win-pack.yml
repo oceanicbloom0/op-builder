@@ -216,7 +216,7 @@ jobs:
           throw "Timed out waiting for callback: download job."
       
       - name: Compress files
-        if: ${{ !inputs.test_mode }}
+        if: always()
         shell: pwsh
         run: |
           while ($true) {
