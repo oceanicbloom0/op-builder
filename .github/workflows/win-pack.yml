@@ -164,6 +164,14 @@ jobs:
         env:
           PVE_WEBHOOK_URL: ${{ secrets.PVE_WEBHOOK_URL }}
           PVE_WEBHOOK_TOKEN: ${{ secrets.PVE_WEBHOOK_TOKEN }}
+          OUTPUT_ISO_NAME: ${{ github.event.inputs.output_iso_name || 'custom-install.iso' }}
+          WINDOWS_VERSION: ${{ github.event.inputs.windows_version || '11' }}
+          WINDOWS_LANGUAGE: ${{ github.event.inputs.windows_language || 'zh-cn' }}
+          INJECT_FILES: ${{ github.event.inputs.inject_files || 'true' }}
+          PREPLACE_COMMON_APPS: ${{ github.event.inputs.preplace_common_apps || 'true' }}
+          PREPLACE_TUBATOOLS: ${{ github.event.inputs.preplace_tubatools || 'false' }}
+          ADD_OEM_INFORMATION: ${{ github.event.inputs.add_oem_information || 'false' }}
+          INCLUDE_OFFICE_PAYLOAD: ${{ github.event.inputs.include_office_payload || 'false' }}
         run: |
           $ErrorActionPreference = "Stop"
 
@@ -174,7 +182,32 @@ jobs:
           $headers = @{
             Authorization = "Bearer $env:PVE_WEBHOOK_TOKEN"
           }
+
+          $suffixParts = @()
+          foreach ($value in @($env:WINDOWS_VERSION, $env:WINDOWS_LANGUAGE)) {
+            if (-not [string]::IsNullOrWhiteSpace($value) -and $value -ne "false") {
+              $suffixParts += $value.Trim()
+            }
+          }
+
+          $flagParts = [ordered]@{
+            INJECT_FILES = "inject_files"
+            PREPLACE_COMMON_APPS = "preplace_common"
+            PREPLACE_TUBATOOLS = "preplace_tubatools"
+            ADD_OEM_INFORMATION = "add_oem_information"
+            INCLUDE_OFFICE_PAYLOAD = "include_office_payload"
+          }
+          foreach ($flag in $flagParts.GetEnumerator()) {
+            $value = [string](Get-Item -Path "Env:$($flag.Key)").Value
+            if (-not [string]::IsNullOrWhiteSpace($value) -and [System.Convert]::ToBoolean($value)) {
+              $suffixParts += $flag.Value
+            }
+          }
+          $suffixParts += $env:GITHUB_RUN_ID
+          $downloadIsoName = "$($env:OUTPUT_ISO_NAME)_$($suffixParts -join '-').iso"
+
           $body = @{
+            filename = $downloadIsoName
             context = @{
               run_id = $env:GITHUB_RUN_ID
               run_number = $env:GITHUB_RUN_NUMBER
