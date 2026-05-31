@@ -12,9 +12,9 @@ on:
         required: true
         default: "master"
       app_config_path:
-        description: "Path to the application configuration file"
+        description: "Application config path, comma-separated paths, or auto"
         required: true
-        default: "configs/app.config"
+        default: "auto"
       devices:
         description: "Specific devices to build (comma-separated, empty for all)"
         required: false
@@ -41,7 +41,7 @@ on:
 env:
   SOURCE_URL: ${{ inputs.openwrt_source }}
   SOURCE_BRANCH: ${{ inputs.openwrt_source_branch }}
-  APP_CONFIG_PATH: ${{ inputs.app_config_path }}
+  APP_CONFIG_PATH: ${{ inputs.app_config_path || 'auto' }}
 
 jobs:
   generate-matrix:
