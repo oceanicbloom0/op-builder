@@ -191,13 +191,17 @@ jobs:
           export SOURCE_REPO="$(basename ${{ matrix.repository }} .git)"
           echo "SOURCE_REPO=$SOURCE_REPO" >> $GITHUB_ENV
           echo "SOURCE_REPO=$SOURCE_REPO" >> $GITHUB_OUTPUT
+          export TOOLCHAIN_BRANCH="${{ matrix.branch }}"
+          TOOLCHAIN_BRANCH="${TOOLCHAIN_BRANCH#openwrt-}"
+          echo "TOOLCHAIN_BRANCH=$TOOLCHAIN_BRANCH" >> $GITHUB_ENV
+          echo "TOOLCHAIN_BRANCH=$TOOLCHAIN_BRANCH" >> $GITHUB_OUTPUT
           export DEVICE_TARGET=$(cat .config | grep CONFIG_TARGET_BOARD | awk -F '"' '{print $2}' || echo "")
           echo "DEVICE_TARGET=$DEVICE_TARGET" >> $GITHUB_ENV
           echo "DEVICE_TARGET=$DEVICE_TARGET" >> $GITHUB_OUTPUT
           export DEVICE_SUBTARGET=$(cat .config | grep CONFIG_TARGET_SUBTARGET | awk -F '"' '{print $2}' || echo "")
           echo "DEVICE_SUBTARGET=$DEVICE_SUBTARGET" >> $GITHUB_ENV
           echo "DEVICE_SUBTARGET=$DEVICE_SUBTARGET" >> $GITHUB_OUTPUT
-          export TOOLCHAIN_IMAGE="toolchain-$SOURCE_REPO-${{ matrix.branch }}-${{ matrix.arch }}"
+          export TOOLCHAIN_IMAGE="toolchain-$SOURCE_REPO-$TOOLCHAIN_BRANCH-${{ matrix.arch }}"
           echo "TOOLCHAIN_IMAGE=$TOOLCHAIN_IMAGE" >> $GITHUB_ENV
           echo "TOOLCHAIN_IMAGE=$TOOLCHAIN_IMAGE" >> $GITHUB_OUTPUT
 
