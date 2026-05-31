@@ -6,11 +6,7 @@ on:
       - ".github/workflows/win-pack.yml"
   workflow_dispatch:
     inputs:
-      test_mode:
-        description: "Test mode (only build, skip deploy)"
-        required: true
-        default: false
-        type: boolean
+
       inject_files:
         description: "Inject files from InjectFiles directory"
         required: true
@@ -24,15 +20,20 @@ on:
       preplace_tubatools:
         description: "Preplace tubatools on the desktop"
         required: true
-        default: false
+        default: true
+        type: boolean
+      include_office_payload:
+        description: "Download Office offline files, pack them into the image, and install on first logon"
+        required: true
+        default: true
         type: boolean
       add_oem_information:
         description: "Add custom OEM information to system properties"
         required: true
         default: false
         type: boolean
-      include_office_payload:
-        description: "Download Office offline files, pack them into the image, and install on first logon"
+      test_mode:
+        description: "Test mode (only build, skip deploy)"
         required: true
         default: false
         type: boolean
@@ -63,11 +64,11 @@ on:
           - "zh-cn"
           - "en-us"
       source_iso_path:
-        description: "Custom source ISO path or URL (leave empty to auto-download)"
+        description: "Custom source ISO path or URL (leave empty to use Fido to download official ISO)"
         required: false
         default: ""
       output_iso_name:
-        description: "Output ISO filename (if package_iso=true)"
+        description: "Output ISO filename"
         required: true
         default: "custom-install.iso"
 
