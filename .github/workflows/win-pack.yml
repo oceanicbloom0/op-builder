@@ -126,7 +126,7 @@ jobs:
           WINDOWS_LANGUAGE: ${{ github.event.inputs.windows_language || 'zh-cn' }}
           INJECT_FILES: ${{ github.event.inputs.inject_files || 'true' }}
           PREPLACE_COMMON_APPS: ${{ github.event.inputs.preplace_common_apps || 'true' }}
-          PREPLACE_TUBATOOLS: ${{ github.event.inputs.preplace_tubatools || 'false' }}
+          PREPLACE_TUBATOOLS: ${{ github.event.inputs.preplace_tubatools || 'true' }}
           ADD_OEM_INFORMATION: ${{ github.event.inputs.add_oem_information || 'false' }}
           INCLUDE_OFFICE_PAYLOAD: ${{ github.event.inputs.include_office_payload || 'true' }}
           SOURCE_ISO_PATH: ${{ github.event.inputs.source_iso_path || '' }}
@@ -172,9 +172,9 @@ jobs:
           WINDOWS_LANGUAGE: ${{ github.event.inputs.windows_language || 'zh-cn' }}
           INJECT_FILES: ${{ github.event.inputs.inject_files || 'true' }}
           PREPLACE_COMMON_APPS: ${{ github.event.inputs.preplace_common_apps || 'true' }}
-          PREPLACE_TUBATOOLS: ${{ github.event.inputs.preplace_tubatools || 'false' }}
+          PREPLACE_TUBATOOLS: ${{ github.event.inputs.preplace_tubatools || 'true' }}
           ADD_OEM_INFORMATION: ${{ github.event.inputs.add_oem_information || 'false' }}
-          INCLUDE_OFFICE_PAYLOAD: ${{ github.event.inputs.include_office_payload || 'false' }}
+          INCLUDE_OFFICE_PAYLOAD: ${{ github.event.inputs.include_office_payload || 'true' }}
         run: |
           $ErrorActionPreference = "Stop"
 
