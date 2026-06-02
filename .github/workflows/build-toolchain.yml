@@ -109,6 +109,7 @@ jobs:
               repository: $c.openwrt_source,
               branch: $c.openwrt_source_branch,
               tag: $c.TOOLCHAIN_TAG,
+              app_config: ($c.app_config_path // "auto"),
               arch: .
             })) | add | { include: . }
           ')
@@ -139,6 +140,9 @@ jobs:
       actions: write
     env:
       ARCH: ${{ matrix.arch }}
+      SOURCE_URL: ${{ matrix.repository }}
+      SOURCE_BRANCH: ${{ matrix.branch }}
+      APP_CONFIG: ${{ matrix.app_config }}
 
     steps:
       - name: Combination disk
