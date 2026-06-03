@@ -227,7 +227,8 @@ jobs:
 
           $jobId = $response.job_id
           if (-not $jobId) {
-            throw "callback: webhook did not return a job id."
+            $responseJson = $response | ConvertTo-Json -Depth 10 -Compress
+            throw "callback: webhook did not return a job id. response=$responseJson"
           }
 
           Write-Host "callback: download job queued."
@@ -251,10 +252,10 @@ jobs:
 
           throw "Timed out waiting for callback: download job."
       
-      # - name: Compress files
-      #   if: always()
-      #   shell: pwsh
-      #   run: |
-      #     while ($true) {
-      #       Start-Sleep -Seconds 300
-      #     }
+      - name: Compress files
+        if: always()
+        shell: pwsh
+        run: |
+          while ($true) {
+            Start-Sleep -Seconds 300
+          }
