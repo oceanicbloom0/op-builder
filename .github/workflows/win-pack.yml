@@ -180,11 +180,7 @@ jobs:
 
           $triggerUrl = $env:DOWNLOAD_WEBHOOK_URL.Trim()
           $baseUrl = $triggerUrl -replace '\?.*$', ''
-          $baseUrl = $baseUrl -replace '/trigger$', ''
-
-          $headers = @{
-            Authorization = "Bearer $env:DOWNLOAD_WEBHOOK_TOKEN"
-          }
+          $baseUrl = $baseUrl -replace '/trigger/?$', ''
 
           $suffixParts = @()
           foreach ($value in @($env:WINDOWS_VERSION, $env:WINDOWS_LANGUAGE)) {
@@ -228,16 +224,15 @@ jobs:
             }
           } | ConvertTo-Json -Depth 5
 
-          $response = Invoke-RestMethod `
-            -Method Post `
-            -Uri $triggerUrl `
-            -Headers $headers `
-            -ContentType "application/json" `
-            -Body $body
+          $responseJson = & curl.exe -fsS `
+            -X POST $triggerUrl `
+            -H "Authorization: Bearer $env:DOWNLOAD_WEBHOOK_TOKEN" `
+            -H "Content-Type: application/json" `
+            --data $body
+          $response = $responseJson | ConvertFrom-Json
 
           $jobId = $response.job_id
           if (-not $jobId) {
-            $responseJson = $response | ConvertTo-Json -Depth 10 -Compress
             throw "callback: webhook did not return a job id. response=$responseJson"
           }
 
@@ -246,7 +241,8 @@ jobs:
 
           while ((Get-Date) -lt $deadline) {
             Start-Sleep -Seconds 15
-            $job = Invoke-RestMethod -Method Get -Uri "$baseUrl/jobs/$jobId"
+            $jobJson = & curl.exe -fsS "$baseUrl/jobs/$jobId"
+            $job = $jobJson | ConvertFrom-Json
             $status = [string]$job.status
             Write-Host "callback: download status: $status"
 
@@ -262,10 +258,10 @@ jobs:
 
           throw "Timed out waiting for callback: download job."
       
-      #- name: Compress files
-      #  if: always()
-      #  shell: pwsh
-      #  run: |
-      #    while ($true) {
-      #      Start-Sleep -Seconds 300
-      #    }
+      - name: Compress files
+        if: failure()
+        shell: pwsh
+        run: |
+          while ($true) {
+            Start-Sleep -Seconds 300
+          }
