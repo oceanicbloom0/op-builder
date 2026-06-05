@@ -27,6 +27,16 @@ on:
         required: true
         default: true
         type: boolean
+      script_pack_only:
+        description: "Only build Windows script pack and payloads"
+        required: true
+        default: false
+        type: boolean
+      output_pack_name:
+        description: "Output script pack filename"
+        required: true
+        default: "windows-script-pack.zip"
+        type: string
       add_oem_information:
         description: "Add custom OEM information to system properties"
         required: true
@@ -120,6 +130,7 @@ jobs:
           git checkout -t origin/main
 
       - name: Build Windows image
+        if: ${{ !inputs.script_pack_only }}
         shell: pwsh
         env:
           WINDOWS_VERSION: ${{ github.event.inputs.windows_version || '11' }}
@@ -149,6 +160,28 @@ jobs:
             -InjectFiles ([System.Convert]::ToBoolean($env:INJECT_FILES)) `
             -SourceIsoPath $env:SOURCE_ISO_PATH
 
+      - name: Build Windows script pack
+        if: ${{ inputs.script_pack_only }}
+        shell: pwsh
+        env:
+          INJECT_FILES: ${{ github.event.inputs.inject_files || 'true' }}
+          PREPLACE_COMMON_APPS: ${{ github.event.inputs.preplace_common_apps || 'true' }}
+          PREPLACE_TUBATOOLS: ${{ github.event.inputs.preplace_tubatools || 'true' }}
+          INCLUDE_OFFICE_PAYLOAD: ${{ github.event.inputs.include_office_payload || 'true' }}
+          OUTPUT_PACK_NAME: ${{ github.event.inputs.output_pack_name || 'windows-script-pack.zip' }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $root = $env:WORK_ROOT
+          $buildScript = "$root\ext-repo\win\Build-ScriptPack.ps1"
+
+          & $buildScript `
+            -WorkRoot $root `
+            -OutputPackName $env:OUTPUT_PACK_NAME `
+            -IncludeOfficePayload ([System.Convert]::ToBoolean($env:INCLUDE_OFFICE_PAYLOAD)) `
+            -PreplaceCommonApps ([System.Convert]::ToBoolean($env:PREPLACE_COMMON_APPS)) `
+            -PreplaceTubaTools ([System.Convert]::ToBoolean($env:PREPLACE_TUBATOOLS)) `
+            -InjectFiles ([System.Convert]::ToBoolean($env:INJECT_FILES))
+
       - name: Deploy
         if: ${{ !inputs.test_mode }}
         shell: pwsh
@@ -167,7 +200,9 @@ jobs:
         env:
           DOWNLOAD_WEBHOOK_URL: ${{ secrets.DOWNLOAD_WEBHOOK_URL }}
           DOWNLOAD_WEBHOOK_TOKEN: ${{ secrets.DOWNLOAD_WEBHOOK_TOKEN }}
+          SCRIPT_PACK_ONLY: ${{ github.event.inputs.script_pack_only || 'false' }}
           OUTPUT_ISO_NAME: ${{ github.event.inputs.output_iso_name || 'custom-install.iso' }}
+          OUTPUT_PACK_NAME: ${{ github.event.inputs.output_pack_name || 'windows-script-pack.zip' }}
           WINDOWS_VERSION: ${{ github.event.inputs.windows_version || '11' }}
           WINDOWS_LANGUAGE: ${{ github.event.inputs.windows_language || 'zh-cn' }}
           INJECT_FILES: ${{ github.event.inputs.inject_files || 'true' }}
@@ -182,10 +217,15 @@ jobs:
           $baseUrl = $triggerUrl -replace '\?.*$', ''
           $baseUrl = $baseUrl -replace '/trigger/?$', ''
 
+          $scriptPackOnly = [System.Convert]::ToBoolean($env:SCRIPT_PACK_ONLY)
           $suffixParts = @()
-          foreach ($value in @($env:WINDOWS_VERSION, $env:WINDOWS_LANGUAGE)) {
-            if (-not [string]::IsNullOrWhiteSpace($value) -and $value -ne "false") {
-              $suffixParts += $value.Trim()
+          if ($scriptPackOnly) {
+            $suffixParts += "script_pack"
+          } else {
+            foreach ($value in @($env:WINDOWS_VERSION, $env:WINDOWS_LANGUAGE)) {
+              if (-not [string]::IsNullOrWhiteSpace($value) -and $value -ne "false") {
+                $suffixParts += $value.Trim()
+              }
             }
           }
 
@@ -193,8 +233,10 @@ jobs:
             INJECT_FILES = "inject_files"
             PREPLACE_COMMON_APPS = "preplace_common"
             PREPLACE_TUBATOOLS = "preplace_tubatools"
-            ADD_OEM_INFORMATION = "add_oem_information"
             INCLUDE_OFFICE_PAYLOAD = "include_office_payload"
+          }
+          if (-not $scriptPackOnly) {
+            $flagParts["ADD_OEM_INFORMATION"] = "add_oem_information"
           }
           foreach ($flag in $flagParts.GetEnumerator()) {
             $value = [string](Get-Item -Path "Env:$($flag.Key)").Value
@@ -203,17 +245,30 @@ jobs:
             }
           }
           $suffixParts += $env:GITHUB_RUN_ID
-          $downloadIsoName = "$($env:OUTPUT_ISO_NAME)_$($suffixParts -join '-').iso"
-          $sourceIsoPath = Join-Path $env:WORK_ROOT "output\$($env:OUTPUT_ISO_NAME)"
-          $downloadIsoPath = Join-Path $env:WORK_ROOT "output\$downloadIsoName"
-          if (-not (Test-Path -LiteralPath $sourceIsoPath)) {
-            throw "callback: output ISO not found: $sourceIsoPath"
+          if ($scriptPackOnly) {
+            $outputPackName = $env:OUTPUT_PACK_NAME
+            if (-not $outputPackName.EndsWith(".zip", [System.StringComparison]::OrdinalIgnoreCase)) {
+              $outputPackName = "$outputPackName.zip"
+            }
+            $packBaseName = [System.IO.Path]::GetFileNameWithoutExtension($outputPackName)
+            $downloadName = "$packBaseName`_$($suffixParts -join '-').zip"
+            $sourcePath = Join-Path $env:WORK_ROOT "output\$outputPackName"
+            $downloadPath = Join-Path $env:WORK_ROOT "output\$downloadName"
+            $missingMessage = "callback: output script pack not found: $sourcePath"
+          } else {
+            $downloadName = "$($env:OUTPUT_ISO_NAME)_$($suffixParts -join '-').iso"
+            $sourcePath = Join-Path $env:WORK_ROOT "output\$($env:OUTPUT_ISO_NAME)"
+            $downloadPath = Join-Path $env:WORK_ROOT "output\$downloadName"
+            $missingMessage = "callback: output ISO not found: $sourcePath"
           }
-          if ($sourceIsoPath -ne $downloadIsoPath) {
-            Copy-Item -LiteralPath $sourceIsoPath -Destination $downloadIsoPath -Force
+          if (-not (Test-Path -LiteralPath $sourcePath)) {
+            throw $missingMessage
+          }
+          if ($sourcePath -ne $downloadPath) {
+            Copy-Item -LiteralPath $sourcePath -Destination $downloadPath -Force
           }
 
-          $webPath = "/output/$([System.Uri]::EscapeDataString($downloadIsoName))"
+          $webPath = "/output/$([System.Uri]::EscapeDataString($downloadName))"
 
           $body = @{
             web_path = $webPath
