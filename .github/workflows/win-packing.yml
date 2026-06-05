@@ -33,9 +33,9 @@ on:
         default: false
         type: boolean
       output_pack_name:
-        description: "Output script pack filename"
+        description: "Output script pack ISO filename"
         required: true
-        default: "windows-script-pack.zip"
+        default: "windows-script-pack.iso"
         type: string
       add_oem_information:
         description: "Add custom OEM information to system properties"
@@ -168,7 +168,7 @@ jobs:
           PREPLACE_COMMON_APPS: ${{ github.event.inputs.preplace_common_apps || 'true' }}
           PREPLACE_TUBATOOLS: ${{ github.event.inputs.preplace_tubatools || 'true' }}
           INCLUDE_OFFICE_PAYLOAD: ${{ github.event.inputs.include_office_payload || 'true' }}
-          OUTPUT_PACK_NAME: ${{ github.event.inputs.output_pack_name || 'windows-script-pack.zip' }}
+          OUTPUT_PACK_NAME: ${{ github.event.inputs.output_pack_name || 'windows-script-pack.iso' }}
         run: |
           $ErrorActionPreference = "Stop"
           $root = $env:WORK_ROOT
@@ -202,7 +202,7 @@ jobs:
           DOWNLOAD_WEBHOOK_TOKEN: ${{ secrets.DOWNLOAD_WEBHOOK_TOKEN }}
           SCRIPT_PACK_ONLY: ${{ github.event.inputs.script_pack_only || 'false' }}
           OUTPUT_ISO_NAME: ${{ github.event.inputs.output_iso_name || 'custom-install.iso' }}
-          OUTPUT_PACK_NAME: ${{ github.event.inputs.output_pack_name || 'windows-script-pack.zip' }}
+          OUTPUT_PACK_NAME: ${{ github.event.inputs.output_pack_name || 'windows-script-pack.iso' }}
           WINDOWS_VERSION: ${{ github.event.inputs.windows_version || '11' }}
           WINDOWS_LANGUAGE: ${{ github.event.inputs.windows_language || 'zh-cn' }}
           INJECT_FILES: ${{ github.event.inputs.inject_files || 'true' }}
@@ -247,14 +247,16 @@ jobs:
           $suffixParts += $env:GITHUB_RUN_ID
           if ($scriptPackOnly) {
             $outputPackName = $env:OUTPUT_PACK_NAME
-            if (-not $outputPackName.EndsWith(".zip", [System.StringComparison]::OrdinalIgnoreCase)) {
-              $outputPackName = "$outputPackName.zip"
+            if ($outputPackName.EndsWith(".zip", [System.StringComparison]::OrdinalIgnoreCase)) {
+              $outputPackName = [System.IO.Path]::ChangeExtension($outputPackName, ".iso")
+            } elseif (-not $outputPackName.EndsWith(".iso", [System.StringComparison]::OrdinalIgnoreCase)) {
+              $outputPackName = "$outputPackName.iso"
             }
             $packBaseName = [System.IO.Path]::GetFileNameWithoutExtension($outputPackName)
-            $downloadName = "$packBaseName`_$($suffixParts -join '-').zip"
+            $downloadName = "$packBaseName`_$($suffixParts -join '-').iso"
             $sourcePath = Join-Path $env:WORK_ROOT "output\$outputPackName"
             $downloadPath = Join-Path $env:WORK_ROOT "output\$downloadName"
-            $missingMessage = "callback: output script pack not found: $sourcePath"
+            $missingMessage = "callback: output script pack ISO not found: $sourcePath"
           } else {
             $downloadName = "$($env:OUTPUT_ISO_NAME)_$($suffixParts -join '-').iso"
             $sourcePath = Join-Path $env:WORK_ROOT "output\$($env:OUTPUT_ISO_NAME)"
