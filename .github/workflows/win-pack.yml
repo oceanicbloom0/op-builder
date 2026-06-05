@@ -252,10 +252,10 @@ jobs:
 
           throw "Timed out waiting for callback: download job."
       
-      - name: Compress files
-        if: always()
-        shell: pwsh
-        run: |
-          while ($true) {
-            Start-Sleep -Seconds 300
-          }
+      #- name: Compress files
+      #  if: always()
+      #  shell: pwsh
+      #  run: |
+      #    while ($true) {
+      #      Start-Sleep -Seconds 300
+      #    }
