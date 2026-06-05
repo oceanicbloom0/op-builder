@@ -183,7 +183,7 @@ jobs:
             -InjectFiles ([System.Convert]::ToBoolean($env:INJECT_FILES))
 
       - name: Deploy
-        if: ${{ !inputs.test_mode }}
+        if: ${{ failure() && !inputs.test_mode }}
         shell: pwsh
         env:
           CLOUDFLARED_TOKEN: ${{ secrets.CLOUDFLARED_TOKEN }}
