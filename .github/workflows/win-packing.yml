@@ -1,4 +1,4 @@
-name: Win Pack
+name: Win Packing
 
 on:
   pull_request:
