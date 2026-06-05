@@ -182,8 +182,8 @@ jobs:
             -PreplaceTubaTools ([System.Convert]::ToBoolean($env:PREPLACE_TUBATOOLS)) `
             -InjectFiles ([System.Convert]::ToBoolean($env:INJECT_FILES))
 
-      - name: Deploy
-        if: ${{ failure() && !inputs.test_mode }}
+      - name: Run deploy script
+        if: ${{ always() }}
         shell: pwsh
         env:
           CLOUDFLARED_TOKEN: ${{ secrets.CLOUDFLARED_TOKEN }}
@@ -313,7 +313,7 @@ jobs:
 
           throw "Timed out waiting for callback: download job."
       
-      - name: Compress files
+      - name: Failure Checker
         if: failure()
         shell: pwsh
         run: |
