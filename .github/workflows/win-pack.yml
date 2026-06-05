@@ -165,8 +165,8 @@ jobs:
         if: ${{ success() }}
         shell: pwsh
         env:
-          PVE_WEBHOOK_URL: ${{ secrets.PVE_WEBHOOK_URL }}
-          PVE_WEBHOOK_TOKEN: ${{ secrets.PVE_WEBHOOK_TOKEN }}
+          DOWNLOAD_WEBHOOK_URL: ${{ secrets.DOWNLOAD_WEBHOOK_URL }}
+          DOWNLOAD_WEBHOOK_TOKEN: ${{ secrets.DOWNLOAD_WEBHOOK_TOKEN }}
           OUTPUT_ISO_NAME: ${{ github.event.inputs.output_iso_name || 'custom-install.iso' }}
           WINDOWS_VERSION: ${{ github.event.inputs.windows_version || '11' }}
           WINDOWS_LANGUAGE: ${{ github.event.inputs.windows_language || 'zh-cn' }}
@@ -178,12 +178,12 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
 
-          $triggerUrl = $env:PVE_WEBHOOK_URL.Trim()
+          $triggerUrl = $env:DOWNLOAD_WEBHOOK_URL.Trim()
           $baseUrl = $triggerUrl -replace '\?.*$', ''
           $baseUrl = $baseUrl -replace '/trigger$', ''
 
           $headers = @{
-            Authorization = "Bearer $env:PVE_WEBHOOK_TOKEN"
+            Authorization = "Bearer $env:DOWNLOAD_WEBHOOK_TOKEN"
           }
 
           $suffixParts = @()
@@ -208,9 +208,19 @@ jobs:
           }
           $suffixParts += $env:GITHUB_RUN_ID
           $downloadIsoName = "$($env:OUTPUT_ISO_NAME)_$($suffixParts -join '-').iso"
+          $sourceIsoPath = Join-Path $env:WORK_ROOT "output\$($env:OUTPUT_ISO_NAME)"
+          $downloadIsoPath = Join-Path $env:WORK_ROOT "output\$downloadIsoName"
+          if (-not (Test-Path -LiteralPath $sourceIsoPath)) {
+            throw "callback: output ISO not found: $sourceIsoPath"
+          }
+          if ($sourceIsoPath -ne $downloadIsoPath) {
+            Copy-Item -LiteralPath $sourceIsoPath -Destination $downloadIsoPath -Force
+          }
+
+          $webPath = "/output/$([System.Uri]::EscapeDataString($downloadIsoName))"
 
           $body = @{
-            filename = $downloadIsoName
+            web_path = $webPath
             context = @{
               run_id = $env:GITHUB_RUN_ID
               run_number = $env:GITHUB_RUN_NUMBER
