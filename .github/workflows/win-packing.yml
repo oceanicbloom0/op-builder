@@ -42,6 +42,11 @@ on:
         required: true
         default: false
         type: boolean
+      auto_partition_install:
+        description: "Wipe disk 0 and install automatically using UEFI/GPT"
+        required: true
+        default: false
+        type: boolean
       test_mode:
         description: "Test mode (only build, skip deploy)"
         required: true
@@ -139,6 +144,7 @@ jobs:
           PREPLACE_COMMON_APPS: ${{ github.event.inputs.preplace_common_apps || 'true' }}
           PREPLACE_TUBATOOLS: ${{ github.event.inputs.preplace_tubatools || 'true' }}
           ADD_OEM_INFORMATION: ${{ github.event.inputs.add_oem_information || 'false' }}
+          AUTO_PARTITION_INSTALL: ${{ github.event.inputs.auto_partition_install || 'false' }}
           INCLUDE_OFFICE_PAYLOAD: ${{ github.event.inputs.include_office_payload || 'true' }}
           SOURCE_ISO_PATH: ${{ github.event.inputs.source_iso_path || '' }}
           OUTPUT_ISO_NAME: ${{ github.event.inputs.output_iso_name || 'custom-install.iso' }}
@@ -157,6 +163,7 @@ jobs:
             -PreplaceCommonApps ([System.Convert]::ToBoolean($env:PREPLACE_COMMON_APPS)) `
             -PreplaceTubaTools ([System.Convert]::ToBoolean($env:PREPLACE_TUBATOOLS)) `
             -AddOemInformation ([System.Convert]::ToBoolean($env:ADD_OEM_INFORMATION)) `
+            -AutoPartitionInstall ([System.Convert]::ToBoolean($env:AUTO_PARTITION_INSTALL)) `
             -InjectFiles ([System.Convert]::ToBoolean($env:INJECT_FILES)) `
             -SourceIsoPath $env:SOURCE_ISO_PATH
 
@@ -209,6 +216,7 @@ jobs:
           PREPLACE_COMMON_APPS: ${{ github.event.inputs.preplace_common_apps || 'true' }}
           PREPLACE_TUBATOOLS: ${{ github.event.inputs.preplace_tubatools || 'true' }}
           ADD_OEM_INFORMATION: ${{ github.event.inputs.add_oem_information || 'false' }}
+          AUTO_PARTITION_INSTALL: ${{ github.event.inputs.auto_partition_install || 'false' }}
           INCLUDE_OFFICE_PAYLOAD: ${{ github.event.inputs.include_office_payload || 'true' }}
         run: |
           $ErrorActionPreference = "Stop"
@@ -237,6 +245,7 @@ jobs:
           }
           if (-not $scriptPackOnly) {
             $flagParts["ADD_OEM_INFORMATION"] = "add_oem_information"
+            $flagParts["AUTO_PARTITION_INSTALL"] = "auto_partition_install"
           }
           foreach ($flag in $flagParts.GetEnumerator()) {
             $value = [string](Get-Item -Path "Env:$($flag.Key)").Value
