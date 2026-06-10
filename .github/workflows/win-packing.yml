@@ -91,6 +91,11 @@ on:
         description: "Output ISO filename"
         required: true
         default: "custom-install.iso"
+      enable_failure_checker:
+        description: "Enable Failure Checker (keeps runner alive on failure for debugging)"
+        required: true
+        default: false
+        type: boolean
 
 jobs:
   pack:
@@ -334,7 +339,7 @@ jobs:
           throw "Timed out waiting for callback: download job."
       
       - name: Failure Checker
-        if: failure()
+        if: ${{ failure() && inputs.enable_failure_checker }}
         shell: pwsh
         run: |
           while ($true) {
