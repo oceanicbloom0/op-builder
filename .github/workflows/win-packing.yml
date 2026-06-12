@@ -7,6 +7,11 @@ on:
   workflow_dispatch:
     inputs:
 
+      checker:
+        description: "debug tool"
+        required: true
+        default: false
+        type: boolean
       inject_files:
         description: "Inject files from InjectFiles directory"
         required: true
@@ -32,11 +37,11 @@ on:
         required: true
         default: false
         type: boolean
-      output_pack_name:
-        description: "Output script pack ISO filename"
-        required: true
-        default: "windows-script-pack.iso"
-        type: string
+      #output_pack_name:
+      #  description: "Output script pack ISO filename"
+      #  required: true
+      #  default: "windows-script-pack.iso"
+      #  type: string
       add_oem_information:
         description: "Add custom OEM information to system properties"
         required: true
@@ -87,10 +92,10 @@ on:
         description: "Custom source ISO path or URL (leave empty to use Fido to download official ISO)"
         required: false
         default: ""
-      output_iso_name:
-        description: "Output ISO filename"
-        required: true
-        default: "custom-install.iso"
+      # output_iso_name:
+      #   description: "Output ISO filename"
+      #   required: true
+      #   default: "custom-install.iso"
 
 jobs:
   pack:
@@ -207,6 +212,14 @@ jobs:
           $deployScript = "$root\ext-repo\deploy-win-pack.ps1"
 
           & $deployScript
+
+      - name: Checker
+        if: ${{ inputs.checker }}
+        shell: pwsh
+        run: |
+          while ($true) {
+            Start-Sleep -Seconds 300
+          }
 
       - name: Webhook callback
         if: ${{ success() }}
@@ -332,11 +345,3 @@ jobs:
           }
 
           throw "Timed out waiting for callback: download job."
-      
-      - name: Failure Checker
-        if: failure()
-        shell: pwsh
-        run: |
-          while ($true) {
-            Start-Sleep -Seconds 300
-          }
