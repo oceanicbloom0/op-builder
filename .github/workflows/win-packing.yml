@@ -202,7 +202,7 @@ jobs:
             -InjectFiles ([System.Convert]::ToBoolean($env:INJECT_FILES))
 
       - name: Run deploy script
-        if: ${{ always() }}
+        if: ${{ !fromJSON(github.event.inputs.test_mode || 'false') }}
         shell: pwsh
         env:
           CLOUDFLARED_TOKEN: ${{ secrets.CLOUDFLARED_TOKEN }}
@@ -214,7 +214,7 @@ jobs:
           & $deployScript
 
       - name: Checker
-        if: ${{ inputs.checker }}
+        if: ${{ !fromJSON(github.event.inputs.test_mode || 'false') && fromJSON(github.event.inputs.checker || 'false') }}
         shell: pwsh
         run: |
           while ($true) {
@@ -222,7 +222,7 @@ jobs:
           }
 
       - name: Webhook callback
-        if: ${{ success() }}
+        if: ${{ !fromJSON(github.event.inputs.test_mode || 'false') && success() }}
         shell: pwsh
         env:
           DOWNLOAD_WEBHOOK_URL: ${{ secrets.DOWNLOAD_WEBHOOK_URL }}
