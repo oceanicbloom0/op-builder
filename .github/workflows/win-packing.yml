@@ -8,7 +8,7 @@ on:
     inputs:
 
       checker:
-        description: "debug tool"
+        description: "checker"
         required: true
         default: false
         type: boolean
