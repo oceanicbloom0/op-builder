@@ -7,8 +7,8 @@ on:
   workflow_dispatch:
     inputs:
 
-      checker:
-        description: "checker"
+      manual_download:
+        description: "Manual download"
         required: true
         default: false
         type: boolean
@@ -213,8 +213,8 @@ jobs:
 
           & $deployScript
 
-      - name: Checker
-        if: ${{ !fromJSON(github.event.inputs.test_mode || 'false') && fromJSON(github.event.inputs.checker || 'false') }}
+      - name: Manual download
+        if: ${{ !fromJSON(github.event.inputs.test_mode || 'false') && fromJSON(github.event.inputs.manual_download || 'false') }}
         shell: pwsh
         run: |
           while ($true) {
