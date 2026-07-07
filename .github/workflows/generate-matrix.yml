@@ -73,7 +73,7 @@ jobs:
           # Validate if device exists (run in configs directory)
           validate_device() {
             local device=$1
-            if [ -d "$device" ] || [ -d "STANDALONE_CONF/$device" ]; then
+            if [ -f "$device/.config" ] || [ -f "STANDALONE_CONF/$device/.config" ]; then
               return 0
             else
               return 1
@@ -129,6 +129,10 @@ jobs:
             # 1. Main configs
             for d in */ ; do
               if [ "$d" = "STANDALONE_CONF/" ]; then
+                continue
+              fi
+              if [ ! -f "$d/.config" ]; then
+                echo "Skipping non-device config directory: ${d%/}"
                 continue
               fi
               # Check if it's a directory

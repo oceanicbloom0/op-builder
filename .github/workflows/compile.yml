@@ -205,7 +205,9 @@ jobs:
 
           # Set OPENWRT_PATH in GITHUB_ENV
           cd openwrt && echo "OPENWRT_PATH=$PWD" >> $GITHUB_ENV
-          git pull
+          git fetch --prune origin "$SOURCE_BRANCH"
+          git checkout -B "$SOURCE_BRANCH" FETCH_HEAD
+          git reset --hard FETCH_HEAD
 
       - name: Add packages
         run: |
@@ -213,8 +215,6 @@ jobs:
 
           chmod +x $GITHUB_WORKSPACE/scripts/openwrt/add-package.sh
           $GITHUB_WORKSPACE/scripts/openwrt/add-package.sh
-
-          git pull
 
           ./scripts/feeds update -a
           ./scripts/feeds install -a
