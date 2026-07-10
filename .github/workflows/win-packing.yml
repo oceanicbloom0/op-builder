@@ -15,7 +15,7 @@ on:
       inject_personal_files:
         description: "Inject personal files from PersonalFiles directory"
         required: true
-        default: true
+        default: false
         type: boolean
       preplace_common_apps:
         description: "Preplace pinned common applications such as 7-Zip on the desktop"
@@ -25,27 +25,27 @@ on:
       preplace_develop_apps:
         description: "Download and preplace development application installers on the desktop"
         required: true
-        default: true
+        default: false
         type: boolean
       preplace_tubatools:
         description: "Preplace tubatools on the desktop"
         required: true
-        default: true
+        default: false
         type: boolean
       preplace_driver_tools:
         description: "Preplace driver installation tools on the desktop"
         required: true
-        default: false
+        default: true
         type: boolean
       preplace_static_tubatools:
         description: "Preplace the static tubatools executable on the desktop"
         required: true
-        default: false
+        default: true
         type: boolean
       include_office_payload:
         description: "Download Office offline files, pack them into the image, and install on first logon"
         required: true
-        default: true
+        default: false
         type: boolean
       script_pack_only:
         description: "Only build Windows script pack and payloads"
