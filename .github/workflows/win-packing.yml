@@ -12,13 +12,18 @@ on:
         required: true
         default: false
         type: boolean
-      inject_files:
-        description: "Inject files from InjectFiles directory"
+      inject_personal_files:
+        description: "Inject personal files from PersonalFiles directory"
         required: true
         default: true
         type: boolean
       preplace_common_apps:
-        description: "Preplace common app installers on the desktop"
+        description: "Preplace pinned common applications such as 7-Zip on the desktop"
+        required: true
+        default: true
+        type: boolean
+      preplace_develop_apps:
+        description: "Download and preplace development application installers on the desktop"
         required: true
         default: true
         type: boolean
@@ -26,6 +31,16 @@ on:
         description: "Preplace tubatools on the desktop"
         required: true
         default: true
+        type: boolean
+      preplace_driver_tools:
+        description: "Preplace driver installation tools on the desktop"
+        required: true
+        default: false
+        type: boolean
+      preplace_static_tubatools:
+        description: "Preplace the static tubatools executable on the desktop"
+        required: true
+        default: false
         type: boolean
       include_office_payload:
         description: "Download Office offline files, pack them into the image, and install on first logon"
@@ -150,9 +165,12 @@ jobs:
         env:
           WINDOWS_VERSION: ${{ github.event.inputs.windows_version || '11' }}
           WINDOWS_LANGUAGE: ${{ github.event.inputs.windows_language || 'zh-cn' }}
-          INJECT_FILES: ${{ github.event.inputs.inject_files || 'true' }}
+          INJECT_PERSONAL_FILES: ${{ github.event.inputs.inject_personal_files || 'true' }}
           PREPLACE_COMMON_APPS: ${{ github.event.inputs.preplace_common_apps || 'true' }}
+          PREPLACE_DEVELOP_APPS: ${{ github.event.inputs.preplace_develop_apps || 'true' }}
           PREPLACE_TUBATOOLS: ${{ github.event.inputs.preplace_tubatools || 'true' }}
+          PREPLACE_DRIVER_TOOLS: ${{ github.event.inputs.preplace_driver_tools || 'false' }}
+          PREPLACE_STATIC_TUBATOOLS: ${{ github.event.inputs.preplace_static_tubatools || 'false' }}
           ADD_OEM_INFORMATION: ${{ github.event.inputs.add_oem_information || 'false' }}
           AUTO_PARTITION_INSTALL: ${{ github.event.inputs.auto_partition_install || 'false' }}
           INJECT_VIOSCSI_DRIVER: ${{ github.event.inputs.inject_vioscsi_driver || 'false' }}
@@ -172,20 +190,26 @@ jobs:
             -IncludeOfficePayload ([System.Convert]::ToBoolean($env:INCLUDE_OFFICE_PAYLOAD)) `
             -PackageIso $true `
             -PreplaceCommonApps ([System.Convert]::ToBoolean($env:PREPLACE_COMMON_APPS)) `
+            -PreplaceDevelopApps ([System.Convert]::ToBoolean($env:PREPLACE_DEVELOP_APPS)) `
             -PreplaceTubaTools ([System.Convert]::ToBoolean($env:PREPLACE_TUBATOOLS)) `
+            -PreplaceDriverTools ([System.Convert]::ToBoolean($env:PREPLACE_DRIVER_TOOLS)) `
+            -PreplaceStaticTubaTools ([System.Convert]::ToBoolean($env:PREPLACE_STATIC_TUBATOOLS)) `
             -AddOemInformation ([System.Convert]::ToBoolean($env:ADD_OEM_INFORMATION)) `
             -AutoPartitionInstall ([System.Convert]::ToBoolean($env:AUTO_PARTITION_INSTALL)) `
             -InjectVirtioScsiDriver ([System.Convert]::ToBoolean($env:INJECT_VIOSCSI_DRIVER)) `
-            -InjectFiles ([System.Convert]::ToBoolean($env:INJECT_FILES)) `
+            -InjectPersonalFiles ([System.Convert]::ToBoolean($env:INJECT_PERSONAL_FILES)) `
             -SourceIsoPath $env:SOURCE_ISO_PATH
 
       - name: Build Windows script pack
         if: ${{ inputs.script_pack_only }}
         shell: pwsh
         env:
-          INJECT_FILES: ${{ github.event.inputs.inject_files || 'true' }}
+          INJECT_PERSONAL_FILES: ${{ github.event.inputs.inject_personal_files || 'true' }}
           PREPLACE_COMMON_APPS: ${{ github.event.inputs.preplace_common_apps || 'true' }}
+          PREPLACE_DEVELOP_APPS: ${{ github.event.inputs.preplace_develop_apps || 'true' }}
           PREPLACE_TUBATOOLS: ${{ github.event.inputs.preplace_tubatools || 'true' }}
+          PREPLACE_DRIVER_TOOLS: ${{ github.event.inputs.preplace_driver_tools || 'false' }}
+          PREPLACE_STATIC_TUBATOOLS: ${{ github.event.inputs.preplace_static_tubatools || 'false' }}
           INCLUDE_OFFICE_PAYLOAD: ${{ github.event.inputs.include_office_payload || 'true' }}
           OUTPUT_PACK_NAME: ${{ github.event.inputs.output_pack_name || 'windows-script-pack.iso' }}
         run: |
@@ -198,8 +222,11 @@ jobs:
             -OutputPackName $env:OUTPUT_PACK_NAME `
             -IncludeOfficePayload ([System.Convert]::ToBoolean($env:INCLUDE_OFFICE_PAYLOAD)) `
             -PreplaceCommonApps ([System.Convert]::ToBoolean($env:PREPLACE_COMMON_APPS)) `
+            -PreplaceDevelopApps ([System.Convert]::ToBoolean($env:PREPLACE_DEVELOP_APPS)) `
             -PreplaceTubaTools ([System.Convert]::ToBoolean($env:PREPLACE_TUBATOOLS)) `
-            -InjectFiles ([System.Convert]::ToBoolean($env:INJECT_FILES))
+            -PreplaceDriverTools ([System.Convert]::ToBoolean($env:PREPLACE_DRIVER_TOOLS)) `
+            -PreplaceStaticTubaTools ([System.Convert]::ToBoolean($env:PREPLACE_STATIC_TUBATOOLS)) `
+            -InjectPersonalFiles ([System.Convert]::ToBoolean($env:INJECT_PERSONAL_FILES))
 
       - name: Run deploy script
         if: ${{ !fromJSON(github.event.inputs.test_mode || 'false') }}
@@ -232,9 +259,12 @@ jobs:
           OUTPUT_PACK_NAME: ${{ github.event.inputs.output_pack_name || 'windows-script-pack.iso' }}
           WINDOWS_VERSION: ${{ github.event.inputs.windows_version || '11' }}
           WINDOWS_LANGUAGE: ${{ github.event.inputs.windows_language || 'zh-cn' }}
-          INJECT_FILES: ${{ github.event.inputs.inject_files || 'true' }}
+          INJECT_PERSONAL_FILES: ${{ github.event.inputs.inject_personal_files || 'true' }}
           PREPLACE_COMMON_APPS: ${{ github.event.inputs.preplace_common_apps || 'true' }}
+          PREPLACE_DEVELOP_APPS: ${{ github.event.inputs.preplace_develop_apps || 'true' }}
           PREPLACE_TUBATOOLS: ${{ github.event.inputs.preplace_tubatools || 'true' }}
+          PREPLACE_DRIVER_TOOLS: ${{ github.event.inputs.preplace_driver_tools || 'false' }}
+          PREPLACE_STATIC_TUBATOOLS: ${{ github.event.inputs.preplace_static_tubatools || 'false' }}
           ADD_OEM_INFORMATION: ${{ github.event.inputs.add_oem_information || 'false' }}
           AUTO_PARTITION_INSTALL: ${{ github.event.inputs.auto_partition_install || 'false' }}
           INJECT_VIOSCSI_DRIVER: ${{ github.event.inputs.inject_vioscsi_driver || 'false' }}
@@ -259,9 +289,12 @@ jobs:
           }
 
           $flagParts = [ordered]@{
-            INJECT_FILES = "inject_files"
+            INJECT_PERSONAL_FILES = "inject_personal_files"
             PREPLACE_COMMON_APPS = "preplace_common"
+            PREPLACE_DEVELOP_APPS = "preplace_develop"
             PREPLACE_TUBATOOLS = "preplace_tubatools"
+            PREPLACE_DRIVER_TOOLS = "preplace_driver_tools"
+            PREPLACE_STATIC_TUBATOOLS = "preplace_static_tubatools"
             INCLUDE_OFFICE_PAYLOAD = "include_office_payload"
           }
           if (-not $scriptPackOnly) {
