@@ -249,6 +249,7 @@ jobs:
         shell: pwsh
         env:
           CLOUDFLARED_TOKEN: ${{ secrets.CLOUDFLARED_TOKEN }}
+          MANUAL_DOWNLOAD: ${{ github.event.inputs.manual_download || 'false' }}
         run: |
           $ErrorActionPreference = "Stop"
           $root = $env:WORK_ROOT
@@ -260,6 +261,11 @@ jobs:
         if: ${{ !fromJSON(github.event.inputs.test_mode || 'false') && fromJSON(github.event.inputs.manual_download || 'false') }}
         shell: pwsh
         run: |
+          if ([string]::IsNullOrWhiteSpace($env:QUICK_TUNNEL_URL)) {
+            throw "Quick Tunnel URL was not published by deploy-win-pack.ps1"
+          }
+          Write-Host "Manual download is ready: $env:QUICK_TUNNEL_URL"
+          Write-Host "Download links are available in the workflow summary."
           while ($true) {
             Start-Sleep -Seconds 300
           }
