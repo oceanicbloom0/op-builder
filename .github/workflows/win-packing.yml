@@ -9,25 +9,25 @@ on:
       manual_download:
         description: "Manual download"
         required: true
-        default: false
+        default: true
         type: boolean
 
       ## Essential Tools ##
       preplace_common_apps:
         description: "Preplace pinned common applications such as 7-Zip on the desktop"
         required: true
-        default: true
+        default: false
         type: boolean
 
       preplace_driver_tools:
         description: "Preplace driver installation tools on the desktop"
         required: true
-        default: true
+        default: false
         type: boolean
       preplace_static_tubatools:
         description: "Preplace the static tubatools executable on the desktop"
         required: true
-        default: true
+        default: false
         type: boolean
       ## Essential Tools ##
 
