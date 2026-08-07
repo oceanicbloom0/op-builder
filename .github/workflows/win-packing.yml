@@ -107,12 +107,6 @@ on:
         required: false
         default: ""
 
-      test_mode:
-        description: "CI：只构建 ISO 不进行其他操作"
-        required: true
-        default: false
-        type: boolean
-
       runner:
         description: "CI：镜像版本"
         required: true
@@ -123,6 +117,12 @@ on:
           - windows-2022
           - windows-2025
           - windows-2025-vs2026
+
+      test_mode:
+        description: "CI：只构建 ISO 不进行其他操作"
+        required: true
+        default: false
+        type: boolean
 
 jobs:
   pack:
