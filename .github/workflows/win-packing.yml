@@ -20,7 +20,7 @@ on:
 
       ## Essential Tools ##
       preplace_common_apps:
-        description: "构建：注入 7z 安装包"
+        description: "构建：注入 常用软件 安装包"
         required: true
         default: false
         type: boolean
