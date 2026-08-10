@@ -233,6 +233,18 @@ jobs:
               -AutoPartitionInstall ([System.Convert]::ToBoolean($env:AUTO_PARTITION_INSTALL)) `
               -InjectVirtioScsiDriver ([System.Convert]::ToBoolean($env:INJECT_VIOSCSI_DRIVER)) `
               -SourceIsoPath $env:SOURCE_ISO_PATH
+
+            $outputNameMarker = Join-Path $root "iso-output-name.txt"
+            if (-not (Test-Path -LiteralPath $outputNameMarker -PathType Leaf)) {
+              throw "Build did not publish the resolved ISO name: $outputNameMarker"
+            }
+            $resolvedOutputIsoName = (Get-Content -LiteralPath $outputNameMarker -Raw).Trim()
+            if ([string]::IsNullOrWhiteSpace($resolvedOutputIsoName)) {
+              throw "Resolved ISO name is empty: $outputNameMarker"
+            }
+            "OUTPUT_ISO_NAME=$resolvedOutputIsoName" |
+              Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+            Write-Host "Resolved output ISO name: $resolvedOutputIsoName"
           }
 
       - name: Run deploy script
@@ -267,7 +279,6 @@ jobs:
           DOWNLOAD_WEBHOOK_URL: ${{ secrets.DOWNLOAD_WEBHOOK_URL }}
           DOWNLOAD_WEBHOOK_TOKEN: ${{ secrets.DOWNLOAD_WEBHOOK_TOKEN }}
           SCRIPT_PACK_ONLY: ${{ github.event.inputs.script_pack_only || 'false' }}
-          OUTPUT_ISO_NAME: ${{ github.event.inputs.output_iso_name || 'custom-install.iso' }}
           OUTPUT_PACK_NAME: ${{ github.event.inputs.output_pack_name || 'windows-script-pack.iso' }}
           WINDOWS_VERSION: ${{ github.event.inputs.windows_version || '11' }}
           WINDOWS_LANGUAGE: ${{ github.event.inputs.windows_language || 'zh-cn' }}
@@ -335,7 +346,11 @@ jobs:
             $downloadPath = Join-Path $env:WORK_ROOT "output\$downloadName"
             $missingMessage = "callback: output script pack ISO not found: $sourcePath"
           } else {
-            $downloadName = "$($env:OUTPUT_ISO_NAME)_$($suffixParts -join '-').iso"
+            if ([string]::IsNullOrWhiteSpace($env:OUTPUT_ISO_NAME)) {
+              throw "callback: OUTPUT_ISO_NAME was not published by the ISO build"
+            }
+            $isoBaseName = [System.IO.Path]::GetFileNameWithoutExtension($env:OUTPUT_ISO_NAME)
+            $downloadName = "$isoBaseName`_$($suffixParts -join '-').iso"
             $sourcePath = Join-Path $env:WORK_ROOT "output\$($env:OUTPUT_ISO_NAME)"
             $downloadPath = Join-Path $env:WORK_ROOT "output\$downloadName"
             $missingMessage = "callback: output ISO not found: $sourcePath"
