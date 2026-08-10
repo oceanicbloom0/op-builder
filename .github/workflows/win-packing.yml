@@ -15,7 +15,7 @@ on:
       script_pack_only:
         description: "构建：只构建 Windows script pack"
         required: true
-        default: true
+        default: false
         type: boolean
 
       ## Essential Tools ##
