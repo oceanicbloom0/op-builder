@@ -260,11 +260,25 @@ jobs:
 
           & $deployScript
 
+      - name: Publish download address
+        if: ${{ !fromJSON(github.event.inputs.test_mode || 'false') && fromJSON(github.event.inputs.manual_download || 'false') }}
+        shell: pwsh
+        env:
+          MANUAL_DOWNLOAD: "true"
+          MANUAL_DOWNLOAD_PHASE: "publish"
+        run: |
+          $ErrorActionPreference = "Stop"
+          $root = $env:WORK_ROOT
+          $deployScript = "$root\ext-repo\deploy-win-pack.ps1"
+
+          & $deployScript
+
       - name: Manual download
         if: ${{ !fromJSON(github.event.inputs.test_mode || 'false') && fromJSON(github.event.inputs.manual_download || 'false') }}
         shell: pwsh
         env:
           MANUAL_DOWNLOAD: "true"
+          MANUAL_DOWNLOAD_PHASE: "serve"
         run: |
           $ErrorActionPreference = "Stop"
           $root = $env:WORK_ROOT
