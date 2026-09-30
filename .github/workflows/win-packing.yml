@@ -127,6 +127,8 @@ on:
 jobs:
   pack:
     runs-on: ${{ github.event.inputs.runner || 'windows-latest' }}
+    permissions:
+      contents: read
 
     steps:
       - name: Prepare directories
@@ -184,6 +186,7 @@ jobs:
       - name: Build Windows image or script pack
         shell: pwsh
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SCRIPT_PACK_ONLY: ${{ github.event.inputs.script_pack_only || 'false' }}
           WINDOWS_VERSION: ${{ github.event.inputs.windows_version || '11' }}
           WINDOWS_LANGUAGE: ${{ github.event.inputs.windows_language || 'zh-cn' }}
